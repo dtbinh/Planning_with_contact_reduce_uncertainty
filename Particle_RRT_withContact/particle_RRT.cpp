@@ -1,6 +1,6 @@
 /*=================================================================
  *
- * planner.c
+ * Particle RRT for an omnidirectional point robot
  *
  *=================================================================*/
 #include <math.h>
@@ -63,51 +63,7 @@ static void planner(
 	*plan = NULL;
 	*planlength = 0;
   int NoOfRuns = 0;
- //  // int** parent;
- //  // Tree tree;
 
- //  Tree tree(armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs);
- //  goalReached = tree.BuildRRT(map, x_size, y_size);
- //  int len = 0;
-
-
- //  if(goalReached)
- //  {
- //    vertex* temp = new vertex;
-  
- //    temp = tree.goal;
- //    vector<vector <double>> pathVec;
-    
- //    vector<double> currVec;
-
- //    // Pushing the backtracked tree in a vector
- //    while (temp!= tree.start)
- //    {
- //      currVec = temp->theta;
- //      pathVec.push_back(currVec);
- //      len = len+1;
- //      mexPrintf("length of tree: %d \n", len);
- //      temp = temp->parent;
- //    }
- //    // pushing in start
- //    if(temp!=NULL){
- //      currVec = temp->theta;
- //      pathVec.push_back(currVec);
- //      len = len+1;
- //    }
-
-
- //    *plan = (double**) malloc(len*sizeof(double*));
-
- //    for (int i = 0; i<len; i++){
- //        (*plan)[i] = (double*) malloc(numofDOFs*sizeof(double));
- //        for(int j = 0; j < numofDOFs; j++){
- //            // *(*(*(plan+i)+j)+0) = tree[tree.size()-i-1][j];
- //          (*plan)[i][j]=pathVec[len-i-1][j];
- //        }
- //    }
- //  }
- //  *planlength = len;
   while(!goalReached){
     NoOfRuns = NoOfRuns + 1;
     goalReached = mainRun(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
@@ -199,8 +155,3 @@ void mexFunction( int nlhs, mxArray *plhs[],
     return;
     
 }
-
-
-
-
-

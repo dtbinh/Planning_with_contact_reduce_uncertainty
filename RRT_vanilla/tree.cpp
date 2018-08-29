@@ -217,7 +217,7 @@ vector<double> Tree::RandRRT(double*  map, int x_size, int y_size){
 
   for(int i = 0; i < numofDOFs; i++)
   {
-    *(check + i) = goal->theta[i];
+    *(check + i) = qrand[i];
   }
 
   if (!IsValidArmConfiguration(check, numofDOFs, map, x_size, y_size))

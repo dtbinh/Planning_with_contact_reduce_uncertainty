@@ -5,6 +5,7 @@
 #include <chrono>
 #include <random>
 
+
 #define GETMAPINDEX(X, Y, XSIZE, YSIZE) (Y*XSIZE + X)
 
 #if !defined(MAX)
@@ -16,6 +17,7 @@
 #endif
 
 #define PI 3.141592654
+#define MAX(A, B) ((A) > (B) ? (A) : (B))
 using namespace std;
 
 //the length of each link in the arm (should be the same as the one used in runtest.m)
@@ -161,7 +163,7 @@ int IsValidArmConfiguration(double* angles, int numofDOFs, double*  map,
     
   //iterate through all the links starting with the base
   x1 = ((double)x_size)/2.0;
-    y1 = 0;
+  y1 = 0;
   for(i = 0; i < numofDOFs; i++)
   {
     //compute the corresponding line segment
@@ -178,11 +180,51 @@ int IsValidArmConfiguration(double* angles, int numofDOFs, double*  map,
 
 void print_vector(vector<double> vecToPrint, int numofDOFs)
 {
-  for(int j = 0; j < numofDOFs; j++)
+  for(int j = 0; j < stateSize; j++)
   {
     mexPrintf("%f    ",vecToPrint[j]);
   }
   mexPrintf("\n");
+}
+
+double* toDoubleVector(VectorXd q, int stateSize){
+
+  for(int i = 0; i < stateSize; i++)
+  {
+    *(check + i) = q(i);
+  }
+  return check;
+}
+//Convert using Armandillo
+double Tree::costCalc(MatrixXd particleMatrix, VectorXd qrand)
+{
+  //-----------------------------------------------------------------------------------------------------------------------------------------------//
+  //------Normalize both the distances to the interval [0,1] by dividing them by the maximum observed value over all the samples-------------------//
+  //-----------------------------------------------------------------------------------------------------------------------------------------------//
+
+  int p = 0;
+  double totCost;
+  double CovCost; //Cost resembling the standard devaition of the particle set
+  double distCost; //Cost resembling the distance of rand from the mean of the particle set
+  
+  MatrixXd deltaMatrix(stateSize,numofParticles);
+  VectorXd meanParticle(stateSize);
+  MatrixXd covMat(stateSize,stateSize);
+
+  meanParticle = particleMatrix.rowwise().mean();
+  deltaMatrix = particleMatrix.colwise() - meanParticle;
+  covMat = (deltaMatrix * deltaMatrix.transpose())/numofParticles;
+  CovCost = sqrt(covMat.trace());
+
+
+  //Finding the distance of rand from the mean of the particle set
+  for (int i = 0; i < stateSize; i++){
+    distCost += pow((qrand[i] - meanParticle(i)),2);
+  }
+  distCost = pow(distCost,0.5);
+  totCost = gamma*CovCost + (1-gamma)*distCost;
+
+  return totCost;
 }
 
 double smallerAngle(double differ)
@@ -195,9 +237,9 @@ double smallerAngle(double differ)
     return differ;
 }
 
-vector<double> Tree::RandRRT(double*  map, int x_size, int y_size){
+VectorXd Tree::RandRRT(double*  map, int x_size, int y_size){
 
-  vector<double> qrand;
+  VectorXd qrand;
   unsigned startSeed = std::chrono::system_clock::now().time_since_epoch().count();
   default_random_engine generator(startSeed);
   uniform_real_distribution<double> distribution(0.0,1.0);
@@ -205,22 +247,15 @@ vector<double> Tree::RandRRT(double*  map, int x_size, int y_size){
   double d = distribution(generator);
 
   if (d<goalProbability){
-    qrand = goal->theta;
+    qrand = goal->particleMatrix.col(0);
   }
   else{
-    for(int i =0;i<numofDOFs; i++){
-      qrand.push_back(2*PI*(distribution(generator)));
-    }
-  }
-  
-  double *check = new double[numofDOFs];
-
-  for(int i = 0; i < numofDOFs; i++)
-  {
-    *(check + i) = goal->theta[i];
+    //random value in the range of map
+    qrand(0)=x_size*(distribution(generator));
+    qrand(1)=y_size*(distribution(generator));
   }
 
-  if (!IsValidArmConfiguration(check, numofDOFs, map, x_size, y_size))
+  if (!IsValidArmConfiguration(toDoubleVector(qrand), stateSize, map, x_size, y_size))
   {
     qrand = RandRRT(map, x_size, y_size);
   }
@@ -228,31 +263,151 @@ vector<double> Tree::RandRRT(double*  map, int x_size, int y_size){
   return qrand;
 }
 
-void Tree::nearestNeighborRRT(vector<double> qrand, vertex **nearestVertex){ //Finding in the tree the nearest neighbour to qrand
+void Tree::nearestNeighborRRT(VectorXd qrand, vertex **nearestVertex){ //Finding in the tree the nearest neighbour to qrand
 
   double shortestDistance = 10000.0;
-  double distance = 0;
-  int i = 0;
-  double difference[numofDOFs];
+  double costTot = 0;
+
+  double difference[stateSize];
 
   for (list<vertex*>::iterator it= vertices.begin(); it != vertices.end(); ++it)
   {
-    distance = 0;
-
-    for (i = 0; i < numofDOFs; ++i)
+    costTot = 0;
+    costTot = costCalc(it->particleMatrix, qrand);
+    if (costTot < shortestDistance)
     {
-      distance += pow(smallerAngle((qrand[i] - (*it)->theta[i])),2);
-    }
-
-    distance = pow(distance,0.5);
-    
-    if (distance < shortestDistance)
-    {
-      shortestDistance = distance;
+      shortestDistance = distTot;
       *nearestVertex = (*it);
     }
   }
 
+}
+
+
+int Tree::selectInput(vertex *nearestVertex){
+  int action;
+  unsigned startSeed = std::chrono::system_clock::now().time_since_epoch().count();
+  default_random_engine generator(startSeed);
+  uniform_real_distribution<double> distribution(0.0,1.0);
+  double g = distribution(generator);
+
+  if(nearestVertex->inContact == FALSE && g < gamma){
+    action = 2; //Guarded
+  }
+  else if(nearestVertex->inContact == FALSE && g > gamma){
+    action = 1; //Connect
+  }
+  else if(nearestVertex->inContact == TRUE && g < gamma){
+    action = 3; //Slide
+  }
+  else if(nearestVertex->inContact == TRUE && g > gamma){
+    action = 1; //Connect
+  }
+  return action;
+}
+
+ 
+//moveToTargetOrContact: Returns 1 if contact occurs, returns 0 if target(qrand) is reached
+//qrand is a Valid Configuration
+int Tree::moveToTargetOrContact(VectorXd qrand, VectorXd *qnew){
+  int advance = 1;
+  int cell_size = 1;
+  double step = step_size;
+  VectorXd q(stateSize);
+  while(advance == 1){
+    if((qrand - qnew).norm() < step_size){
+      *qnew = qrand;
+      advance = 0;
+      return advance;
+    }
+    else{
+      q = *qnew + step*(qrand - *qnew)/(qrand - *qnew).norm(); //step towards qrand
+      if(IsValidArmConfiguration(toDoubleVector(q), , stateSize, map, x_size, y_size)){
+        *qnew = q;
+      }
+      else{
+        step = step/2;
+        if(step < cell_size){
+          advance = 1;
+          return advance;
+        }
+      }
+    }
+  }
+}
+
+// moveToContact: Connects to the nearest contact (obstacle/wall)
+void Tree::moveToContact(VectorXd qrand, VectorXd *qnew){
+  int advance = 1;
+  int cell_size = 1;
+  double step = step_size;
+  VectorXd q(stateSize);
+  while(advance == 1){
+    q = *qnew + step*(qrand - *qnew)/(qrand - *qnew).norm(); //step towards qrand
+    if(IsValidArmConfiguration(toDoubleVector(q), stateSize, map, x_size, y_size)){
+      *qnew = q;
+    }
+    else{
+      step = step/2;
+      if(step < cell_size){
+        advance = 0;
+        return;
+      }
+    }
+  }
+}
+
+// Connect function: Move towards qrand till qrand is reached or contact occurs
+// Returns 1 if it connects to qrand and returns 2 if it comes in contact with a wall/obstacle
+void Tree::connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex){
+  int flag1 = 0;
+  int flag2 = 0;;
+  int temp1 = 0;;
+  int temp2 = 0;
+  VectorXd qrand(stateSize);
+  VectorXd qnew(stateSize);
+  
+  for(int i = 0; i < numofParticles; i++){
+    qrand = targetMatrix.col(i);
+    qnew = nearestVertex->particleMatrix.col(i);
+
+    if (IsValidArmConfiguration(toDoubleVector(qrand), stateSize, map, x_size, y_size)){
+      temp1 = moveToTargetOrContact(qrand, &qnew); //Returns 1 if contact occurs
+      flag1 = MAX(temp1, flag1);
+    }
+    else{
+      moveToContact(qrand, &qnew);
+      flag2 = 1;
+    }
+    newVertex->particleMatrix.col(i) = qnew;
+  }
+  if(MAX(flag1, flag2)){
+    newVertex->inContact = 1;
+  }
+  newVertex->parent = nearestVertex;
+  nearestVertex->children.push_back(newVertex);
+}
+
+void Tree::guarded(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex){
+
+  VectorXd qrand(stateSize);
+  VectorXd qnew(stateSize);
+  
+  for(int i = 0; i < numofParticles; i++){
+    qrand = targetMatrix.col(i);
+    qnew = nearestVertex->particleMatrix.col(i);
+    moveToContact(qrand, &qnew);
+    newVertex->particleMatrix.col(i) = qnew;
+  }
+
+  newVertex->inContact = 1;
+
+  newVertex->parent = nearestVertex;
+  nearestVertex->children.push_back(newVertex);
+}
+
+void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex){
+  return;
 }
 
 int Tree::extendRRT(vector<double> qrand, double*  map, int x_size, int y_size){ //Extending the tree to qnear after checking for collisions
@@ -266,14 +421,21 @@ int Tree::extendRRT(vector<double> qrand, double*  map, int x_size, int y_size){
   vertex *nearestVertex = new vertex;
   vertex *newVertex = new vertex;
   Tree::nearestNeighborRRT(qrand, &nearestVertex);
-  double *check = new double[numofDOFs];
-  // mexPrintf("\n");
-  // mexPrintf("Random: ");  
-  // print_vector(qrand, numofDOFs);
-  // mexPrintf("Nearest: "); 
-  // print_vector(nearestVertex->theta, numofDOFs);
+  double *check = new double[stateSize];
+  //Finding the action to take based on nearest node
+  int action = selectInput(nearestVertex);
+  MatrixXd targetMatrix(stateSize, numofParticles);
+
+  //Find qtarget = qrand + (qnearest - qnearestmean)
+  targetMatrix = qrand + (nearestVertex->particleMatrix.colwise() - nearestVertex->particleMatrix.rowwise().mean());
   
-  for (int i = 0; i < numofDOFs; ++i)
+  switch(action) {
+    case 1 : connect(targetMatrix, nearestVertex, newVertex); break;
+    case 2 : guarded(targetMatrix, nearestVertex, newVertex); break;
+    case 3 : slide(targetMatrix, nearestVertex, newVertex);
+  }
+  //Find qnew which is at distance step_size from qnear
+  for (int i = 0; i < stateSize; ++i)
   {
     diffVector.push_back(smallerAngle(qrand[i] - nearestVertex->theta[i]));
     distBwVectors += pow(diffVector[i],2);
