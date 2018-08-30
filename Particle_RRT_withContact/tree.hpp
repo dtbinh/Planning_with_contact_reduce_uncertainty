@@ -54,10 +54,10 @@ public:
 	vertex* goal = new vertex;
 	float goalProbability;
 	int maxconfigs;
-
+  vector<vector<pair<double,double>>> MAP_normal;
 	Tree(double* pointBot_start_state_xy,
 	    double* pointBot_goal_state_xy,
-	    int nDOFs){
+	    int nDOFs, double* map, int x_size, int y_size){
 
 		//Initializing start and goal
 		start->parent = NULL;
@@ -84,8 +84,55 @@ public:
 
   	start->inContact = FALSE;
   	vertices.push_back(start);
-    	
-	}
+
+    // Initializing map normal vectors at borders of obstacles
+
+    for(int i = 0; i <= 12; i++)
+    {
+      MAP_normal[i][14] = (-1,0);
+      MAP_normal[i][18] = (1,0);
+    }
+    MAP_normal[13][15] = (0,-1);
+    MAP_normal[13][16] = (0,-1);
+    MAP_normal[13][17] = (0,-1);
+    for(int i = 0; i <= 8; i++)
+    {
+      MAP_normal[17][i] = (0,1);
+      MAP_normal[22][i] = (0,-1);
+    }
+    MAP_normal[18][9] = (1,0);
+    MAP_normal[19][9] = (1,0);
+    MAP_normal[20][9] = (1,0);
+    MAP_normal[21][9] = (1,0);
+
+    // Initializing map normal vectors at walls
+
+    for(int i = 0; i <= 17; i++) //left edge
+    {
+      MAP_normal[i][0] = (1,0);
+    }
+    for(int i = 22; i <= 49; i++) //left edge
+    {
+      MAP_normal[i][0] = (1,0);
+    }
+    for(int i = 0; i <= 14; i++) //top edge
+    {
+      MAP_normal[0][i] = (0,-1);
+    }
+    for(int i = 18; i <= 49; i++) //top edge
+    {
+      MAP_normal[0][i] = (0,-1);
+    }
+    for(int i = 0; i <= 49; i++) //right edge
+    {
+      MAP_normal[i][49] = (-1,0);
+    }
+    for(int i = 0; i <= 49; i++) //bottom edge
+    {
+      MAP_normal[49][i] = (0,1);
+    }
+
+  }
 public:
 	double 	stdDev(list<Particle> ParticleSet, int numofParticles, int stateSize);
 	vector<double>	RandRRT(double*  map, int x_size, int y_size);

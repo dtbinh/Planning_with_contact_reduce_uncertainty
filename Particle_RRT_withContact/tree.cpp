@@ -337,7 +337,7 @@ int Tree::moveToTargetOrContact(VectorXd qrand, VectorXd *qnew){
 }
 
 // moveToContact: Connects to the nearest contact (obstacle/wall)
-void Tree::moveToContact(VectorXd qrand, VectorXd *qnew){
+void Tree::moveToContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_size, int y_size){
   int advance = 1;
   int cell_size = 1;
   double step = step_size;
@@ -359,7 +359,7 @@ void Tree::moveToContact(VectorXd qrand, VectorXd *qnew){
 
 // Connect function: Move towards qrand till qrand is reached or contact occurs
 // Returns 1 if it connects to qrand and returns 2 if it comes in contact with a wall/obstacle
-void Tree::connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex){
+void Tree::connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex, double*  map, int x_size, int y_size){
   int flag1 = 0;
   int flag2 = 0;;
   int temp1 = 0;;
@@ -406,13 +406,84 @@ void Tree::guarded(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVert
   nearestVertex->children.push_back(newVertex);
 }
 
-void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex){
-  return;
+//moveToTargetOrContact: Returns 1 if new contact occurs, returns 2 if contact is lost, returns 3 if target(qrand) is reached
+//qrand is a Valid Configuration
+void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex, double*  map, int x_size, int y_size){
+
+  VectorXd qrand(stateSize);
+  VectorXd qnew(stateSize);
+  MatrixXd projectedTargetMatrix(stateSize, numofParticles);
+  projectedTargetMatrix = targetMatrix.colwise() - ( (targetMatrix.colwise() - nearestVertex->particleMatrix.colwise()).transpose()*MAP_normal[nearestVertex->particleMatrix[0][0]][nearestVertex->particleMatrix[1][0]] )*MAP_normal[nearestVertex->particleMatrix[0][0]][nearestVertex->particleMatrix[1][0]];
+  int advance = 3;
+  int targetReached = 0;
+  int newContact = 0;
+  int lostContact = 0;
+  pair<double,double> newContactSurface;
+  VectorXd pointOnNewContactSurf(stateSize);
+  VectorXd lostContactEdge(stateSize);
+  
+  for(int i = 0; i < numofParticles; i++){
+    qrand = targetMatrix.col(i);
+    qnew = nearestVertex->particleMatrix.col(i);
+
+    int temp1 = 0;
+    int temp2 = 0;
+    int temp3 = 0;
+
+    while((temp1+temp2+temp3) == 0){
+      if((qrand - qnew).norm() < step_size){
+        *qnew = qrand;
+        temp1 = 1;
+      }
+      else{
+        q = *qnew + step*(qrand - *qnew)/(qrand - *qnew).norm(); //step towards qrand
+        if(IsValidArmConfiguration(toDoubleVector(q), stateSize, map, x_size, y_size) && *map[q(0)][q(1)] == 2){
+          *qnew = q;
+        }
+        else {
+          step = step/2;
+          if(step < cell_size){
+            if(!IsValidArmConfiguration(toDoubleVector(q)))
+              temp2 = 1; // New contact
+              newContactSurface = MAP_normal[*qnew(0)][*qnew(1)];
+              pointOnNewContactSurf = *qnew;
+            else
+              lostContactEdge = *qnew;
+              temp3 = 1; //Lost contact
+          }
+        }
+      }
+    }
+    newVertex->particleMatrix.col(i) = qnew;
+    targetReached = MAX(targetReached, temp1);
+    newContact = MAX(newContact, temp2);
+    lostContact = MAX(lostContact, temp3);
+  }
+
+  if(newContact > 0){
+    advance = 1;
+    newVertex->particleMatrix = newVertex->particleMatrix.colwise() - ( (newVertex->particleMatrix.colwise() - pointOnNewContactSurf).transpose()*MAP_normal[pointOnNewContactSurf[0]][pointOnNewContactSurf[1]] )*MAP_normal[pointOnNewContactSurf[0]][pointOnNewContactSurf[1]];
+    // projectOnContSurf(newVertex, newContactSurface);
+    newVertex->inContact = 1;
+  }
+  else if(lostContact > 0){
+    advance = 2;
+    projectToLostContact(newVertex, newContactSurface);
+    newVertex->inContact = 0;
+  }
+
+  motion_model(newVertex);
+  project(newVertex);
+
+  newVertex->parent = nearestVertex;
+  nearestVertex->children.push_back(newVertex);
+  return advance;
 }
 
+//What does flag return ?
 int Tree::extendRRT(vector<double> qrand, double*  map, int x_size, int y_size){ //Extending the tree to qnear after checking for collisions
 
-  int flag;
+  int flag = 0;
   double distBwVectors = 0;
   vector<double> diffVector;
   double distToGoal = 0;
@@ -434,72 +505,7 @@ int Tree::extendRRT(vector<double> qrand, double*  map, int x_size, int y_size){
     case 2 : guarded(targetMatrix, nearestVertex, newVertex); break;
     case 3 : slide(targetMatrix, nearestVertex, newVertex);
   }
-  //Find qnew which is at distance step_size from qnear
-  for (int i = 0; i < stateSize; ++i)
-  {
-    diffVector.push_back(smallerAngle(qrand[i] - nearestVertex->theta[i]));
-    distBwVectors += pow(diffVector[i],2);
-  }
-  distBwVectors = pow(distBwVectors, 0.5);
-  // mexPrintf("Dist to goal: %f\n", distToGoal);
-  
 
-  if(distBwVectors > step_size)
-  {
-    for (int i = 0; i < numofDOFs; ++i)
-    {
-      nextAngle = nearestVertex->theta[i] + step_size*(diffVector[i])/distBwVectors;
-      // mexPrintf("Next angle test = %g  ", nextAngle);
-      if (nextAngle < 0)
-        qnew.push_back((2*PI + nextAngle));
-      else if (nextAngle > 2*PI)
-        qnew.push_back((nextAngle - 2*PI));
-      else
-        qnew.push_back((nextAngle));
-    }
-    
-  }
-  else
-  {
-    for (int i = 0; i < numofDOFs; ++i)
-      qnew.push_back((qrand[i]));
-  }
-
-  for(int i = 0; i < numofDOFs; i++)
-  {
-    *(check + i) = qnew[i];
-  }
-
-  if (IsValidArmConfiguration(check, numofDOFs, map, x_size, y_size))
-  {
-    distToGoal = 0;
-    //adding new vertex to the tree;
-    // mexPrintf("adding new vertex to the tree\n");
-    // mexPrintf("NewVertex: ");
-    // print_vector(qnew, numofDOFs);
-    newVertex->theta = qnew;
-    newVertex->parent = nearestVertex;
-    nearestVertex->children.push_back(newVertex);
-    vertices.push_back(newVertex);
-
-    for (int i = 0; i < numofDOFs; ++i)
-    {
-      distToGoal += pow(smallerAngle(newVertex->theta[i] - goal->theta[i]),2);
-    }
-    distToGoal = pow(distToGoal,0.5);
-    if(distToGoal < step_size){
-      flag = 1; //goal reached
-      goal->parent = newVertex;
-      newVertex->children.push_back(goal);
-    }
-    else{
-      flag = 2; //Advanced
-    }
-    
-  }
-  else{
-    flag = 3; //Blocked
-  }
   return flag;
 }
 

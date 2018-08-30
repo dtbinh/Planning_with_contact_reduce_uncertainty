@@ -7,4 +7,4 @@ clear
 mex -v CXXFLAGS="$CXXFLAGS -std=c++11" -largeArrayDims planner_RRT.cpp tree.cpp
 startQ = [30 30];
 goalQ = [6 6];
-runtest('map1.txt',startQ, goalQ);
+runtest('map2.txt',startQ, goalQ);
