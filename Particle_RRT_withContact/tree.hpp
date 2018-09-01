@@ -13,10 +13,15 @@
 #include <ctime>
 #include <chrono>
 #include <random>
+#include <iostream>
+#include <fstream>
 #include <eigen3/Eigen/Dense>
 
 using namespace Eigen;
 #define PI 3.141592654
+#define NUMBEROFPARTICLES 20
+
+#define STATE_SIZE 2
 #if !defined(MAX)
 #define	MAX(A, B)	((A) > (B) ? (A) : (B))
 #endif
@@ -25,6 +30,8 @@ using namespace Eigen;
 #define	MIN(A, B)	((A) < (B) ? (A) : (B))
 #endif
 using namespace std;
+
+typedef Matrix<double, STATE_SIZE, NUMBEROFPARTICLES> MatrixPd;
 
 //Removed this as using eigen matrices made more sense for matrix calculations
 // typedef struct particle
@@ -35,7 +42,8 @@ using namespace std;
 
 typedef struct vertex{
     // list<Particle> ParticleSet; //Particle set for state of the robot
-    MatrixXd particleMatrix(stateSize,numofParticles);
+    // MatrixXd particleMatrix;
+    MatrixXd particleMatrix;
     bool inContact = 0; // Boolean to know if the robot is in contact or not, default not in contact
     std::list<vertex*> children;
     vertex* parent;
@@ -54,90 +62,102 @@ public:
 	vertex* goal = new vertex;
 	float goalProbability;
 	int maxconfigs;
-  vector<vector<pair<double,double>>> MAP_normal;
+  MatrixXd MAP_normalx;
+  MatrixXd MAP_normaly;
+
 	Tree(double* pointBot_start_state_xy,
 	    double* pointBot_goal_state_xy,
 	    int nDOFs, double* map, int x_size, int y_size){
 
+    MAP_normalx = MatrixXd::Zero(x_size, y_size);
+    MAP_normaly = MatrixXd::Zero(x_size, y_size);
 		//Initializing start and goal
 		start->parent = NULL;
-		// start->vertexID = 1;
 		goal->parent = NULL;
-		step_size = 0.3;// PI*5/180; //% degrees increment
+		step_size = 2;
   	stateSize = nDOFs;
-  	numofParticles = 20;
-  	goalProbability = 0.90;
-  	maxconfigs = 30000;
+  	numofParticles = NUMBEROFPARTICLES;
+  	goalProbability = 0.9;
+  	maxconfigs = 5;//30000;
   	gamma = 0.5;
 
   	unsigned startSeed = std::chrono::system_clock::now().time_since_epoch().count();
   	default_random_engine generator(startSeed);
   	uniform_real_distribution<double> distribution(0.0,9.0);
-
-  	for (int i = 0; i < numofParticles; i++)
+    start->particleMatrix = MatrixXd::Zero(stateSize, numofParticles);
+    goal->particleMatrix = MatrixXd::Zero(stateSize, numofParticles);
+  	for (int i = 0; i < stateSize; i++)
   	{
-  		for(int j = 0 ; j < stateSize; j++){
-        start->particleMatrix(j,i) = distribution(generator)+ *(armstart_anglesV_rad+i);
-        goal->particleMatrix(j,i) = *(armgoal_anglesV_rad+i);
+  		for(int j = 0 ; j < numofParticles; j++){
+        start->particleMatrix(i,j) = distribution(generator)+ *(pointBot_start_state_xy+i);
+        goal->particleMatrix(i,j) = *(pointBot_goal_state_xy+i);
       }
   	}
-
-  	start->inContact = FALSE;
+    
+  	start->inContact = 0;
   	vertices.push_back(start);
 
     // Initializing map normal vectors at borders of obstacles
 
     for(int i = 0; i <= 12; i++)
     {
-      MAP_normal[i][14] = (-1,0);
-      MAP_normal[i][18] = (1,0);
+      MAP_normalx(i,14) = -1.0;
+      MAP_normalx(i,18) = 1.0;
+
     }
-    MAP_normal[13][15] = (0,-1);
-    MAP_normal[13][16] = (0,-1);
-    MAP_normal[13][17] = (0,-1);
+    MAP_normaly(13,15) = -1.0;
+    MAP_normaly(13,16) = -1.0;
+    MAP_normaly(13.17) = -1.0;
     for(int i = 0; i <= 8; i++)
     {
-      MAP_normal[17][i] = (0,1);
-      MAP_normal[22][i] = (0,-1);
+      MAP_normaly(17,i) = 1.0;
+      MAP_normaly(22,i) = -1.0;
     }
-    MAP_normal[18][9] = (1,0);
-    MAP_normal[19][9] = (1,0);
-    MAP_normal[20][9] = (1,0);
-    MAP_normal[21][9] = (1,0);
+    MAP_normalx(18,9) = 1.0;
+    MAP_normalx(19,9) = 1.0;
+    MAP_normalx(20,9) = 1.0;
+    MAP_normalx(21,9) = 1.0;
 
     // Initializing map normal vectors at walls
 
     for(int i = 0; i <= 17; i++) //left edge
     {
-      MAP_normal[i][0] = (1,0);
+      MAP_normalx(i,0) = 1.0;
     }
     for(int i = 22; i <= 49; i++) //left edge
     {
-      MAP_normal[i][0] = (1,0);
+      MAP_normalx(i,0) = 1.0;
     }
     for(int i = 0; i <= 14; i++) //top edge
     {
-      MAP_normal[0][i] = (0,-1);
+      MAP_normaly(0,i) = -1.0;
     }
     for(int i = 18; i <= 49; i++) //top edge
     {
-      MAP_normal[0][i] = (0,-1);
+      MAP_normaly(0,i) = -1.0;
     }
     for(int i = 0; i <= 49; i++) //right edge
     {
-      MAP_normal[i][49] = (-1,0);
+      MAP_normalx(i,49) = -1.0;
     }
     for(int i = 0; i <= 49; i++) //bottom edge
     {
-      MAP_normal[49][i] = (0,1);
+      MAP_normaly(49,i) = 1.0;
     }
 
   }
 public:
-	double 	stdDev(list<Particle> ParticleSet, int numofParticles, int stateSize);
-	vector<double>	RandRRT(double*  map, int x_size, int y_size);
-	void	nearestNeighborRRT(vector<double> qrand, vertex **nearestVertex);
-	int 	extendRRT(vector<double> qrand, double*  map, int x_size, int y_size);
+
+  double costCalc(MatrixXd particleMatrix, VectorXd qrand);
+	VectorXd RandRRT(double* map, int x_size, int y_size);
+	void nearestNeighborRRT(VectorXd qrand, vertex **nearestVertex);
+  int selectInput(vertex *nearestVertex);
+  int moveToTargetOrContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_size, int y_size);
+  void  moveToContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_size, int y_size);
+  void  connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex, double*  map, int x_size, int y_size);
+  void  guarded(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex, double*  map, int x_size, int y_size);
+  void  slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex, double*  map, int x_size, int y_size);
+	int 	extendRRT(VectorXd qrand, double*  map, int x_size, int y_size);
 	int 	BuildRRT(double*  map, int x_size, int y_size);
 
 
@@ -163,10 +183,14 @@ int 	get_next_point(bresenham_param_t *params);
 int 	IsValidLineSegment(double x0, double y0, double x1, double y1, double*  map, int x_size, int y_size);
 int 	IsValidArmConfiguration(double* angles, int numofDOFs, double*  map, int x_size, int y_size);
 int 	mainRun(double*  map, int x_size, int y_size, double* armstart_anglesV_rad, double* armgoal_anglesV_rad, int numofDOFs, double*** plan, int* planlength);
+int IsValidState(double* state, int stateSize, double*  map, int x_size, int y_size);
+int IsInContactLayer(double* state, int stateSize, double*  map, int x_size, int y_size);
 //Helper functions
-double 	smallerAngle(double differ);
-float 	distNorm(double* q, double* qrand1, int numofDOFs);
-void 	print_vector(vector<double> vecToPrint, int numofDOFs);
+
+float distNorm(double* q, double* qrand1, int numofDOFs);
+void 	print_vector(VectorXd vecToPrint, int numofDOFs);
+void  print_particleMatrix(MatrixXd matToPrint, int stateSize, int numofParticles);
+double* toDoubleVector(VectorXd q, int stateSize);
 
 
 #endif // TREE__

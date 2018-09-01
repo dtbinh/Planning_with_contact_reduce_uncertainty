@@ -31,6 +31,7 @@
 /* Output Arguments */
 #define	PLAN_OUT	plhs[0]
 #define	PLANLENGTH_OUT	plhs[1]
+#define NUMOFPARTICLES_OUT plhs[2]
 
 #define GETMAPINDEX(X, Y, XSIZE, YSIZE) (Y*XSIZE + X)
 
@@ -80,6 +81,7 @@ static void planner(
 //1st is a 2D matrix plan when each plan[i][j] is the value of jth angle at the ith step of the plan
 //(there are D DoF of the arm (that is, D angles). So, j can take values from 0 to D-1
 //2nd is planlength (int)
+//3rd is the number of particles in each particle set
 void mexFunction( int nlhs, mxArray *plhs[], 
 		  int nrhs, const mxArray*prhs[])
      
@@ -89,7 +91,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
     if (nrhs != 3) { 
 	    mexErrMsgIdAndTxt( "MATLAB:planner:invalidNumInputs",
                 "Three input arguments required."); 
-    } else if (nlhs != 2) {
+    } else if (nlhs != 3) {
 	    mexErrMsgIdAndTxt( "MATLAB:planner:maxlhs",
                 "One output argument required."); 
     } 
@@ -124,13 +126,13 @@ void mexFunction( int nlhs, mxArray *plhs[],
     /* Create return values */
     if(planlength > 0)
     {
-        PLAN_OUT = mxCreateNumericMatrix( (mwSize)planlength, (mwSize)numofDOFs, mxDOUBLE_CLASS, mxREAL); 
+        PLAN_OUT = mxCreateNumericMatrix( (mwSize)planlength, (mwSize)(NUMBEROFPARTICLES*numofDOFs), mxDOUBLE_CLASS, mxREAL); 
         double* plan_out = mxGetPr(PLAN_OUT);        
         //copy the values
         int i,j;
         for(i = 0; i < planlength; i++)
         {
-            for (j = 0; j < numofDOFs; j++)
+            for (j = 0; j < (NUMBEROFPARTICLES*numofDOFs); j++)
             {
                 plan_out[j*planlength + i] = plan[i][j];
             }
@@ -138,20 +140,24 @@ void mexFunction( int nlhs, mxArray *plhs[],
     }
     else
     {
-        PLAN_OUT = mxCreateNumericMatrix( (mwSize)1, (mwSize)numofDOFs, mxDOUBLE_CLASS, mxREAL); 
+        PLAN_OUT = mxCreateNumericMatrix( (mwSize)1, (mwSize)(NUMBEROFPARTICLES*numofDOFs), mxDOUBLE_CLASS, mxREAL); 
         double* plan_out = mxGetPr(PLAN_OUT);
         //copy the values
-        int j;
-        for(j = 0; j < numofDOFs; j++)
+
+        for(int j = 0; j < (NUMBEROFPARTICLES*numofDOFs); j++)
         {
                 plan_out[j] = armstart_anglesV_rad[j];
-        }     
+        }
+    	planlength = 1;
     }
-    PLANLENGTH_OUT = mxCreateNumericMatrix( (mwSize)1, (mwSize)1, mxINT8_CLASS, mxREAL); 
+    PLANLENGTH_OUT = mxCreateNumericMatrix( (mwSize)1, (mwSize)1, mxINT8_CLASS, mxREAL);
     int* planlength_out = (int*) mxGetPr(PLANLENGTH_OUT);
     *planlength_out = planlength;
 
-    
+    NUMOFPARTICLES_OUT = mxCreateNumericMatrix( (mwSize)1, (mwSize)1, mxINT8_CLASS, mxREAL);
+    int* numofparticles_out = (int*) mxGetPr(NUMOFPARTICLES_OUT);
+    *numofparticles_out = NUMBEROFPARTICLES;
+
     return;
     
 }

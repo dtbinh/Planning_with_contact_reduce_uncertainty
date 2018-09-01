@@ -1,6 +1,6 @@
-function[armplan] = armplanner(envmap, armstart, armgoal);
+function[armplan, armplanlength, numOfParticles] = armplanner(envmap, armstart, armgoal)
 
 
  %call the planner in C
- [armplan, armplanlength] = planner_RRT(envmap, armstart, armgoal);
+ [armplan, armplanlength, numOfParticles] = particle_RRT(envmap, armstart, armgoal);
 

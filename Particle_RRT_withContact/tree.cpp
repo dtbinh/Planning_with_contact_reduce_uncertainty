@@ -178,7 +178,36 @@ int IsValidArmConfiguration(double* angles, int numofDOFs, double*  map,
   }    
 }
 
-void print_vector(vector<double> vecToPrint, int numofDOFs)
+int IsValidState(double* state, int stateSize, double*  map, int x_size, int y_size){
+  double x = state[0];
+  double y = state[1];
+
+  if(x < 0 || x >= x_size ||
+  y < 0 || y >= y_size)
+  return 0;
+  short unsigned int nX, nY;
+  ContXY2Cell(x, y, &nX, &nY, x_size, y_size);
+  if(map[GETMAPINDEX(nX,nY,x_size,y_size)] == 1)
+        return 0;
+  return 1;
+}
+
+int IsInContactLayer(double* state, int stateSize, double*  map,
+  int x_size, int y_size){
+  double x = state[0];
+  double y = state[1];
+
+  if(x < 0 || x >= x_size ||
+  y < 0 || y >= y_size)
+  return 0;
+  short unsigned int nX, nY;
+  ContXY2Cell(x, y, &nX, &nY, x_size, y_size);
+  if(map[GETMAPINDEX(nX,nY,x_size,y_size)] == 2)
+        return 1;
+  return 0;
+}
+
+void print_vector(VectorXd vecToPrint, int stateSize)
 {
   for(int j = 0; j < stateSize; j++)
   {
@@ -187,8 +216,21 @@ void print_vector(vector<double> vecToPrint, int numofDOFs)
   mexPrintf("\n");
 }
 
-double* toDoubleVector(VectorXd q, int stateSize){
+void print_particleMatrix(MatrixXd matToPrint, int stateSize, int numofParticles)
+{
 
+  for(int i = 0; i < stateSize; i++)
+  {
+    for (int j = 0; j< numofParticles; j++){
+      mexPrintf("%f  ",matToPrint(i,j));
+    }
+    mexPrintf("\n");
+  }
+  mexPrintf("\n");
+}
+
+double* toDoubleVector(VectorXd q, int stateSize){
+  double *check = new double[stateSize];
   for(int i = 0; i < stateSize; i++)
   {
     *(check + i) = q(i);
@@ -227,19 +269,10 @@ double Tree::costCalc(MatrixXd particleMatrix, VectorXd qrand)
   return totCost;
 }
 
-double smallerAngle(double differ)
-{
-  if (differ > PI)
-    return (differ - 2*PI);
-  else if (differ < -PI)
-    return (2*PI + differ);
-  else 
-    return differ;
-}
 
-VectorXd Tree::RandRRT(double*  map, int x_size, int y_size){
+VectorXd Tree::RandRRT(double* map, int x_size, int y_size){
 
-  VectorXd qrand;
+  VectorXd qrand(stateSize);
   unsigned startSeed = std::chrono::system_clock::now().time_since_epoch().count();
   default_random_engine generator(startSeed);
   uniform_real_distribution<double> distribution(0.0,1.0);
@@ -251,11 +284,12 @@ VectorXd Tree::RandRRT(double*  map, int x_size, int y_size){
   }
   else{
     //random value in the range of map
-    qrand(0)=x_size*(distribution(generator));
-    qrand(1)=y_size*(distribution(generator));
+
+    qrand(0) = x_size*(distribution(generator));
+    qrand(1) = y_size*(distribution(generator));
   }
 
-  if (!IsValidArmConfiguration(toDoubleVector(qrand), stateSize, map, x_size, y_size))
+  if (!IsValidState(toDoubleVector(qrand, stateSize), stateSize, map, x_size, y_size))
   {
     qrand = RandRRT(map, x_size, y_size);
   }
@@ -267,22 +301,30 @@ void Tree::nearestNeighborRRT(VectorXd qrand, vertex **nearestVertex){ //Finding
 
   double shortestDistance = 10000.0;
   double costTot = 0;
-
   double difference[stateSize];
 
   for (list<vertex*>::iterator it= vertices.begin(); it != vertices.end(); ++it)
   {
-    costTot = 0;
-    costTot = costCalc(it->particleMatrix, qrand);
+    
+    mexPrintf("Printing vertices matrix:\n");
+    print_particleMatrix((*it)->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+
+    costTot = costCalc((*it)->particleMatrix, qrand);
     if (costTot < shortestDistance)
     {
-      shortestDistance = distTot;
+      shortestDistance = costTot;
       *nearestVertex = (*it);
     }
   }
 
+    mexPrintf("Printing nearestVertex matrix1:\n");
+    print_particleMatrix((*nearestVertex)->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+  return;
 }
 
+// void Tree::motion_model(){
+//   return;
+// }
 
 int Tree::selectInput(vertex *nearestVertex){
   int action;
@@ -291,16 +333,16 @@ int Tree::selectInput(vertex *nearestVertex){
   uniform_real_distribution<double> distribution(0.0,1.0);
   double g = distribution(generator);
 
-  if(nearestVertex->inContact == FALSE && g < gamma){
+  if(nearestVertex->inContact == 0 && g < gamma){
     action = 2; //Guarded
   }
-  else if(nearestVertex->inContact == FALSE && g > gamma){
+  else if(nearestVertex->inContact == 0 && g > gamma){
     action = 1; //Connect
   }
-  else if(nearestVertex->inContact == TRUE && g < gamma){
+  else if(nearestVertex->inContact == 1 && g < gamma){
     action = 3; //Slide
   }
-  else if(nearestVertex->inContact == TRUE && g > gamma){
+  else if(nearestVertex->inContact == 1 && g > gamma){
     action = 1; //Connect
   }
   return action;
@@ -309,20 +351,20 @@ int Tree::selectInput(vertex *nearestVertex){
  
 //moveToTargetOrContact: Returns 1 if contact occurs, returns 0 if target(qrand) is reached
 //qrand is a Valid Configuration
-int Tree::moveToTargetOrContact(VectorXd qrand, VectorXd *qnew){
+int Tree::moveToTargetOrContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_size, int y_size){
   int advance = 1;
   int cell_size = 1;
   double step = step_size;
   VectorXd q(stateSize);
   while(advance == 1){
-    if((qrand - qnew).norm() < step_size){
+    if((qrand - *qnew).norm() < step_size){
       *qnew = qrand;
       advance = 0;
       return advance;
     }
     else{
       q = *qnew + step*(qrand - *qnew)/(qrand - *qnew).norm(); //step towards qrand
-      if(IsValidArmConfiguration(toDoubleVector(q), , stateSize, map, x_size, y_size)){
+      if(IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size)){
         *qnew = q;
       }
       else{
@@ -344,7 +386,7 @@ void Tree::moveToContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_siz
   VectorXd q(stateSize);
   while(advance == 1){
     q = *qnew + step*(qrand - *qnew)/(qrand - *qnew).norm(); //step towards qrand
-    if(IsValidArmConfiguration(toDoubleVector(q), stateSize, map, x_size, y_size)){
+    if(IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size)){
       *qnew = q;
     }
     else{
@@ -371,12 +413,12 @@ void Tree::connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVert
     qrand = targetMatrix.col(i);
     qnew = nearestVertex->particleMatrix.col(i);
 
-    if (IsValidArmConfiguration(toDoubleVector(qrand), stateSize, map, x_size, y_size)){
-      temp1 = moveToTargetOrContact(qrand, &qnew); //Returns 1 if contact occurs
+    if (IsValidState(toDoubleVector(qrand, stateSize), stateSize, map, x_size, y_size)){
+      temp1 = moveToTargetOrContact(qrand, &qnew, map, x_size, y_size); //Returns 1 if contact occurs
       flag1 = MAX(temp1, flag1);
     }
     else{
-      moveToContact(qrand, &qnew);
+      moveToContact(qrand, &qnew, map, x_size, y_size);
       flag2 = 1;
     }
     newVertex->particleMatrix.col(i) = qnew;
@@ -386,9 +428,10 @@ void Tree::connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVert
   }
   newVertex->parent = nearestVertex;
   nearestVertex->children.push_back(newVertex);
+  return;
 }
 
-void Tree::guarded(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex){
+void Tree::guarded(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex, double*  map, int x_size, int y_size){
 
   VectorXd qrand(stateSize);
   VectorXd qnew(stateSize);
@@ -396,7 +439,7 @@ void Tree::guarded(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVert
   for(int i = 0; i < numofParticles; i++){
     qrand = targetMatrix.col(i);
     qnew = nearestVertex->particleMatrix.col(i);
-    moveToContact(qrand, &qnew);
+    moveToContact(qrand, &qnew, map, x_size, y_size);
     newVertex->particleMatrix.col(i) = qnew;
   }
 
@@ -404,16 +447,22 @@ void Tree::guarded(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVert
 
   newVertex->parent = nearestVertex;
   nearestVertex->children.push_back(newVertex);
+  return;
 }
 
 //moveToTargetOrContact: Returns 1 if new contact occurs, returns 2 if contact is lost, returns 3 if target(qrand) is reached
 //qrand is a Valid Configuration
 void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex, double*  map, int x_size, int y_size){
-
+  double cell_size = 1.0;
   VectorXd qrand(stateSize);
   VectorXd qnew(stateSize);
+  VectorXd q(stateSize);
   MatrixXd projectedTargetMatrix(stateSize, numofParticles);
-  projectedTargetMatrix = targetMatrix.colwise() - ( (targetMatrix.colwise() - nearestVertex->particleMatrix.colwise()).transpose()*MAP_normal[nearestVertex->particleMatrix[0][0]][nearestVertex->particleMatrix[1][0]] )*MAP_normal[nearestVertex->particleMatrix[0][0]][nearestVertex->particleMatrix[1][0]];
+  MatrixXd dotProduct(1, numofParticles);
+  VectorXd normal(stateSize);
+  normal << MAP_normalx(nearestVertex->particleMatrix(0,0) ,nearestVertex->particleMatrix(1,0)), MAP_normaly(nearestVertex->particleMatrix(0,0) ,nearestVertex->particleMatrix(1,0));
+  dotProduct = ((targetMatrix - nearestVertex->particleMatrix).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>())).colwise().sum();
+  projectedTargetMatrix = targetMatrix - (dotProduct.replicate<STATE_SIZE,1>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>());
   int advance = 3;
   int targetReached = 0;
   int newContact = 0;
@@ -421,35 +470,37 @@ void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex
   pair<double,double> newContactSurface;
   VectorXd pointOnNewContactSurf(stateSize);
   VectorXd lostContactEdge(stateSize);
-  
+
   for(int i = 0; i < numofParticles; i++){
     qrand = targetMatrix.col(i);
     qnew = nearestVertex->particleMatrix.col(i);
-
+    double step = step_size;
     int temp1 = 0;
     int temp2 = 0;
     int temp3 = 0;
 
     while((temp1+temp2+temp3) == 0){
       if((qrand - qnew).norm() < step_size){
-        *qnew = qrand;
+        qnew = qrand;
         temp1 = 1;
       }
       else{
-        q = *qnew + step*(qrand - *qnew)/(qrand - *qnew).norm(); //step towards qrand
-        if(IsValidArmConfiguration(toDoubleVector(q), stateSize, map, x_size, y_size) && *map[q(0)][q(1)] == 2){
-          *qnew = q;
+        q = qnew + step*(qrand - qnew)/(qrand - qnew).norm(); //step towards qrand
+        if(IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size) && IsInContactLayer(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size) == 1){
+          qnew = q;
         }
         else {
           step = step/2;
           if(step < cell_size){
-            if(!IsValidArmConfiguration(toDoubleVector(q)))
+            if(!IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size)){
               temp2 = 1; // New contact
-              newContactSurface = MAP_normal[*qnew(0)][*qnew(1)];
-              pointOnNewContactSurf = *qnew;
-            else
-              lostContactEdge = *qnew;
+              // newContactSurface = pair(MAP_normalx(qnew(0), qnew(1)), MAP_normaly(qnew(0), qnew(1)));
+              pointOnNewContactSurf = qnew;
+            }
+            else{
+              lostContactEdge = qnew;
               temp3 = 1; //Lost contact
+            }
           }
         }
       }
@@ -462,36 +513,43 @@ void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex
 
   if(newContact > 0){
     advance = 1;
-    newVertex->particleMatrix = newVertex->particleMatrix.colwise() - ( (newVertex->particleMatrix.colwise() - pointOnNewContactSurf).transpose()*MAP_normal[pointOnNewContactSurf[0]][pointOnNewContactSurf[1]] )*MAP_normal[pointOnNewContactSurf[0]][pointOnNewContactSurf[1]];
+    normal[0] = MAP_normalx(pointOnNewContactSurf[0], pointOnNewContactSurf[1]);
+    normal[1] = MAP_normaly(pointOnNewContactSurf[0], pointOnNewContactSurf[1]);
+    dotProduct = ((newVertex->particleMatrix - pointOnNewContactSurf.replicate<1,NUMBEROFPARTICLES>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>())).colwise().sum();
+    newVertex->particleMatrix = newVertex->particleMatrix - (dotProduct.replicate<STATE_SIZE,1>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>());
+    
+    // newVertex->particleMatrix = newVertex->particleMatrix.colwise() - ( (newVertex->particleMatrix.colwise() - pointOnNewContactSurf).transpose()*normal )*normal;
     // projectOnContSurf(newVertex, newContactSurface);
     newVertex->inContact = 1;
   }
   else if(lostContact > 0){
     advance = 2;
-    projectToLostContact(newVertex, newContactSurface);
+    // ----------------------- Include this later, how to do it in higher dimensions?-----------------------------
+    // projectToLostContact(newVertex, newContactSurface);
     newVertex->inContact = 0;
   }
 
-  motion_model(newVertex);
-  project(newVertex);
+  // motion_model(newVertex);
+  // project(newVertex);
 
   newVertex->parent = nearestVertex;
   nearestVertex->children.push_back(newVertex);
-  return advance;
+  return;
 }
 
-//What does flag return ?
-int Tree::extendRRT(vector<double> qrand, double*  map, int x_size, int y_size){ //Extending the tree to qnear after checking for collisions
+//return 1 if goal is reached 
+int Tree::extendRRT(VectorXd qrand, double*  map, int x_size, int y_size){ //Extending the tree to qnear after checking for collisions
 
   int flag = 0;
-  double distBwVectors = 0;
-  vector<double> diffVector;
-  double distToGoal = 0;
-  double nextAngle;
-  vector<double> qnew;
+
   vertex *nearestVertex = new vertex;
   vertex *newVertex = new vertex;
-  Tree::nearestNeighborRRT(qrand, &nearestVertex);
+
+  nearestNeighborRRT(qrand, &nearestVertex);
+
+  mexPrintf("Printing nearestVertex matrix2:\n");
+  print_particleMatrix(nearestVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+
   double *check = new double[stateSize];
   //Finding the action to take based on nearest node
   int action = selectInput(nearestVertex);
@@ -500,18 +558,28 @@ int Tree::extendRRT(vector<double> qrand, double*  map, int x_size, int y_size){
   //Find qtarget = qrand + (qnearest - qnearestmean)
   targetMatrix = qrand + (nearestVertex->particleMatrix.colwise() - nearestVertex->particleMatrix.rowwise().mean());
   
-  switch(action) {
-    case 1 : connect(targetMatrix, nearestVertex, newVertex); break;
-    case 2 : guarded(targetMatrix, nearestVertex, newVertex); break;
-    case 3 : slide(targetMatrix, nearestVertex, newVertex);
-  }
 
+  switch(action) {
+    case 1 : connect(targetMatrix, nearestVertex, newVertex, map, x_size, y_size); break;
+    case 2 : guarded(targetMatrix, nearestVertex, newVertex, map, x_size, y_size); break;
+    case 3 : slide(targetMatrix, nearestVertex, newVertex, map, x_size, y_size);
+  }
+  //newVertex added is a valid config so is added to the tree
+  //Check distance to goal, return 1 if goal is reached
+  mexPrintf("Printing newVertex matrix:\n");
+  print_particleMatrix(newVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+
+  if((newVertex->particleMatrix.rowwise().mean() - goal->particleMatrix.col(0)).norm() < step_size){
+    flag == 1; //Goal reached
+    goal->parent = newVertex;
+    newVertex->children.push_back(goal);
+  }
   return flag;
 }
-
+//return 1 if goal is reached
 int Tree::BuildRRT(double* map, int x_size, int y_size){
 
-  vector<double> qrand;
+  VectorXd qrand;
 
   int i;
 
@@ -520,6 +588,9 @@ int Tree::BuildRRT(double* map, int x_size, int y_size){
     float nearDist = 100000;
     qrand = RandRRT(map, x_size, y_size);
     
+    mexPrintf("Printing qrand:\n");
+    print_vector(qrand, STATE_SIZE);
+
     int flag = extendRRT(qrand, map, x_size, y_size);
     
     if(flag == 1){
@@ -531,40 +602,46 @@ int Tree::BuildRRT(double* map, int x_size, int y_size){
   return 0;
 }
 
-int mainRun(double*  map, int x_size, int y_size, double* armstart_anglesV_rad, double* armgoal_anglesV_rad, int numofDOFs, double*** plan, int* planlength){
+int mainRun(double*  map, int x_size, int y_size, double* armstart_anglesV_rad, double* armgoal_anglesV_rad, int stateSize, double*** plan, int* planlength){
   *plan = NULL;
   *planlength = 0;
   int goalReached;
-  Tree tree(armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs);
+  
+  Tree tree(armstart_anglesV_rad, armgoal_anglesV_rad, stateSize, map, x_size, y_size);
+  
+  mexPrintf("Printing start matrix:\n");
+  print_particleMatrix(tree.start->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+
+  mexPrintf("Printing goal matrix:\n");
+  print_particleMatrix(tree.goal->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+  
   goalReached = tree.BuildRRT(map, x_size, y_size);
   int len = 0;
 
   vertex* temp = new vertex;
-
   temp = tree.goal;
-  vector<vector <double>> pathVec;
+  vector<Eigen::MatrixXd,Eigen::aligned_allocator<Eigen::MatrixXd> > pathVec;
+  // vector<MatrixXd<double,stateSize,numofParticles> > pathVec;
+  // vector<vector <double>> pathVec;
   
   if(goalReached)
   {
     vertex* temp = new vertex;
-  
     temp = tree.goal;
-    vector<vector <double>> pathVec;
-    
-    vector<double> currVec;
+    MatrixXd currParticleMatrix(STATE_SIZE,NUMBEROFPARTICLES);
 
     // Pushing the backtracked tree in a vector
     while (temp!= tree.start)
     {
-      currVec = temp->theta;
-      pathVec.push_back(currVec);
+      currParticleMatrix = temp->particleMatrix;
+      pathVec.push_back(currParticleMatrix);
       len = len+1;
       temp = temp->parent;
     }
     // pushing in start
     if(temp!=NULL){
-      currVec = temp->theta;
-      pathVec.push_back(currVec);
+      currParticleMatrix = temp->particleMatrix;
+      pathVec.push_back(currParticleMatrix);
       len = len+1;
     }
 
@@ -572,12 +649,13 @@ int mainRun(double*  map, int x_size, int y_size, double* armstart_anglesV_rad, 
     *plan = (double**) malloc(len*sizeof(double*));
 
     for (int i = 0; i<len; i++){
-        (*plan)[i] = (double*) malloc(numofDOFs*sizeof(double));
-        for(int j = 0; j < numofDOFs; j++){
-            // *(*(*(plan+i)+j)+0) = tree[tree.size()-i-1][j];
-          (*plan)[i][j]=pathVec[len-i-1][j];
-        }
+      (*plan)[i] = (double*) malloc((NUMBEROFPARTICLES*STATE_SIZE)*sizeof(double));
+      for(int j = 0; j < (NUMBEROFPARTICLES*STATE_SIZE); j++){
+          // *(*(*(plan+i)+j)+0) = tree[tree.size()-i-1][j];
+        (*plan)[i][j]=pathVec[len-i-1](j%STATE_SIZE, (int)(j/STATE_SIZE));
+      }
     }
+
   }
   *planlength = len;
   return goalReached;
