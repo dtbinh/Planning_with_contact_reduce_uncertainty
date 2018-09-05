@@ -19,7 +19,7 @@
 
 using namespace Eigen;
 #define PI 3.141592654
-#define NUMBEROFPARTICLES 20
+#define NUMBEROFPARTICLES 5
 
 #define STATE_SIZE 2
 #if !defined(MAX)
@@ -44,7 +44,7 @@ typedef struct vertex{
     // list<Particle> ParticleSet; //Particle set for state of the robot
     // MatrixXd particleMatrix;
     MatrixXd particleMatrix;
-    bool inContact = 0; // Boolean to know if the robot is in contact or not, default not in contact
+    bool inContact; // Boolean to know if the robot is in contact or not, default not in contact
     std::list<vertex*> children;
     vertex* parent;
 } vertex;
@@ -74,18 +74,20 @@ public:
 		//Initializing start and goal
 		start->parent = NULL;
 		goal->parent = NULL;
-		step_size = 2;
+		step_size = 3.0;
   	stateSize = nDOFs;
   	numofParticles = NUMBEROFPARTICLES;
   	goalProbability = 0.9;
-  	maxconfigs = 5;//30000;
+  	maxconfigs = 1;//30000;
   	gamma = 0.5;
 
   	unsigned startSeed = std::chrono::system_clock::now().time_since_epoch().count();
   	default_random_engine generator(startSeed);
   	uniform_real_distribution<double> distribution(0.0,9.0);
     start->particleMatrix = MatrixXd::Zero(stateSize, numofParticles);
+    start->inContact = 0;
     goal->particleMatrix = MatrixXd::Zero(stateSize, numofParticles);
+    goal->inContact = 0;
   	for (int i = 0; i < stateSize; i++)
   	{
   		for(int j = 0 ; j < numofParticles; j++){
@@ -103,11 +105,11 @@ public:
     {
       MAP_normalx(i,14) = -1.0;
       MAP_normalx(i,18) = 1.0;
-
     }
     MAP_normaly(13,15) = -1.0;
     MAP_normaly(13,16) = -1.0;
     MAP_normaly(13.17) = -1.0;
+
     for(int i = 0; i <= 8; i++)
     {
       MAP_normaly(17,i) = 1.0;
@@ -154,9 +156,9 @@ public:
   int selectInput(vertex *nearestVertex);
   int moveToTargetOrContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_size, int y_size);
   void  moveToContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_size, int y_size);
-  void  connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex, double*  map, int x_size, int y_size);
-  void  guarded(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex, double*  map, int x_size, int y_size);
-  void  slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex *newVertex, double*  map, int x_size, int y_size);
+  void  connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVertex, double*  map, int x_size, int y_size);
+  void  guarded(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVertex, double*  map, int x_size, int y_size);
+  void  slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVertex, double*  map, int x_size, int y_size);
 	int 	extendRRT(VectorXd qrand, double*  map, int x_size, int y_size);
 	int 	BuildRRT(double*  map, int x_size, int y_size);
 

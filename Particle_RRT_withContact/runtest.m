@@ -6,7 +6,7 @@ envmap = load(mapfile);
 close all;
 
 %draw the environment
-image(envmap'*255);
+image(envmap, 'CDataMapping','scaled');
 hold on;
 
 %armplan should be a matrix of D by N 
@@ -40,7 +40,7 @@ for i = 1:size(armplanlength)
         particley(k) = armplan(i,j+1);
         k = k+1;
     end
-    scatter(particlex,particley,'filled');
+    scatter(particley,particlex,'filled');
 end
     pause(0.5);
 end

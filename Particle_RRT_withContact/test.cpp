@@ -53,6 +53,15 @@ int main()
   	vector<Eigen::MatrixXd,Eigen::aligned_allocator<Eigen::MatrixXd> > pathVec;
   	pathVec.push_back(particleMatrix);
 
+  	VectorXd a(2);
+  	VectorXd b(2);
+  	VectorXd q(2);
+  	a << 1,1;
+  	b << 5,5;
+  	double step = 2*1.414;
+  	a = a + step*(b - a)/(b - a).norm();
+  	cout << "q stepped\n" << a << endl;
+
 	// cout << "Rand\n" << endl;
 	// vector<double> rand = {7, 7, 7};
  //    for (int i = 0; i < rand.size(); i++) {

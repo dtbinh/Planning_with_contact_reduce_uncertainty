@@ -5,6 +5,6 @@ clear
 % mex planner_RRT.cpp
 % mex planner_RRT.cpp
 mex -v CXXFLAGS="$CXXFLAGS -std=c++11" -largeArrayDims particle_RRT.cpp tree.cpp
-startQ = [30 30];
+startQ = [30 6];
 goalQ = [6 6];
 runtest('map2.txt',startQ, goalQ);

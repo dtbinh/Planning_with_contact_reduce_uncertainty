@@ -57,7 +57,7 @@ static void planner(
         double* armgoal_anglesV_rad,
 	   int numofDOFs,
 	   double*** plan,
-	   int* planlength)
+	   int* planlength)	
 {
 	//no plan by default
   int goalReached = 0;
@@ -65,11 +65,18 @@ static void planner(
 	*planlength = 0;
   int NoOfRuns = 0;
 
-  while(!goalReached){
+  // while(!goalReached){
     NoOfRuns = NoOfRuns + 1;
     goalReached = mainRun(map, x_size, y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, plan, planlength);
-  }
-  mexPrintf("\n No. of runs = %d", NoOfRuns);
+  // }
+
+  // mexPrintf("\n No. of runs = %d", NoOfRuns);
+
+	if (goalReached == 1)
+		mexPrintf("\n GOAL REACHED\n");
+	else
+		mexPrintf("\n GOAL NOT REACHED\n");
+
   return;
 }
 
