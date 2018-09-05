@@ -83,7 +83,7 @@ public:
 
   	unsigned startSeed = std::chrono::system_clock::now().time_since_epoch().count();
   	default_random_engine generator(startSeed);
-  	uniform_real_distribution<double> distribution(0.0,9.0);
+  	uniform_real_distribution<double> distribution(0.0,7.0);
     start->particleMatrix = MatrixXd::Zero(stateSize, numofParticles);
     start->inContact = 0;
     goal->particleMatrix = MatrixXd::Zero(stateSize, numofParticles);
@@ -100,25 +100,28 @@ public:
   	vertices.push_back(start);
 
     // Initializing map normal vectors at borders of obstacles
-
-    for(int i = 0; i <= 12; i++)
+    //Verticle obstacle
+    for(int i = 0; i <= 13; i++)
     {
-      MAP_normalx(i,14) = -1.0;
-      MAP_normalx(i,18) = 1.0;
+      MAP_normalx(i,45) = -1.0;
+      // MAP_normalx(i,18) = 1.0;
     }
-    MAP_normaly(13,15) = -1.0;
-    MAP_normaly(13,16) = -1.0;
-    MAP_normaly(13.17) = -1.0;
+    MAP_normaly(13,46) = -1.0;
+    MAP_normaly(13,47) = -1.0;
+    MAP_normaly(13,48) = -1.0;
+    MAP_normaly(13,49) = -1.0;
 
-    for(int i = 0; i <= 8; i++)
+
+    //Horizontal obstacle
+    for(int i = 0; i <= 38; i++)
     {
       MAP_normaly(17,i) = 1.0;
       MAP_normaly(22,i) = -1.0;
     }
-    MAP_normalx(18,9) = 1.0;
-    MAP_normalx(19,9) = 1.0;
-    MAP_normalx(20,9) = 1.0;
-    MAP_normalx(21,9) = 1.0;
+    MAP_normalx(18,38) = 1.0;
+    MAP_normalx(19,38) = 1.0;
+    MAP_normalx(20,38) = 1.0;
+    MAP_normalx(21,38) = 1.0;
 
     // Initializing map normal vectors at walls
 
@@ -130,15 +133,15 @@ public:
     {
       MAP_normalx(i,0) = 1.0;
     }
-    for(int i = 0; i <= 14; i++) //top edge
+    for(int i = 0; i <= 45; i++) //top edge
     {
       MAP_normaly(0,i) = -1.0;
     }
-    for(int i = 18; i <= 49; i++) //top edge
-    {
-      MAP_normaly(0,i) = -1.0;
-    }
-    for(int i = 0; i <= 49; i++) //right edge
+    // for(int i = 18; i <= 49; i++) //top edge
+    // {
+    //   MAP_normaly(0,i) = -1.0;
+    // }
+    for(int i = 13; i <= 49; i++) //right edge
     {
       MAP_normalx(i,49) = -1.0;
     }

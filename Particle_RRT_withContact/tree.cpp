@@ -358,7 +358,7 @@ int Tree::moveToTargetOrContact(VectorXd qrand, VectorXd *qnew, double*  map, in
   double cell_size = 1.0;
   double step = step_size;
   VectorXd q(stateSize);
-  int count = 0;
+  // int count = 0;
 
   while(advance == 1){
     if((qrand - *qnew).norm() < step_size){
@@ -378,7 +378,7 @@ int Tree::moveToTargetOrContact(VectorXd qrand, VectorXd *qnew, double*  map, in
         *qnew = q;
       }
       else{
-        step = step/2.0;
+        step = step - cell_size;
         mexPrintf("Step reduced to=%f\n", step);
         if(step < cell_size){
           advance = 1;
@@ -390,11 +390,11 @@ int Tree::moveToTargetOrContact(VectorXd qrand, VectorXd *qnew, double*  map, in
         }
       }
     }
-    count = count +1;
-    if(count == 20){
-      mexPrintf("Count limit reached\n");
-      break;
-    }
+    // count = count +1;
+    // if(count == 20){
+    //   mexPrintf("Count limit reached\n");
+    //   break;
+    // }
   }
   return 0;
 }
@@ -402,7 +402,7 @@ int Tree::moveToTargetOrContact(VectorXd qrand, VectorXd *qnew, double*  map, in
 // moveToContact: Connects to the nearest contact (obstacle/wall)
 void Tree::moveToContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_size, int y_size){
   int advance = 1;
-  int count = 0;
+  // int count = 0;
   double cell_size = 1.0;
   double step = step_size;
   VectorXd q(stateSize);
@@ -417,7 +417,7 @@ void Tree::moveToContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_siz
       *qnew = q;
     }
     else{
-      step = step/2.0;
+      step = step - cell_size;
       mexPrintf("Step reduced to=%f\n", step);
       if(step < cell_size){
         mexPrintf("CONTACT MADE in move to contact function as step=%f\n", step);
@@ -428,12 +428,13 @@ void Tree::moveToContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_siz
         return;
       }
     }
-    count = count +1;
-    if(count == 20){
-      mexPrintf("Count limit reached\n");
-      break;
-    }
+    // count = count +1;
+    // if(count == 20){
+    //   mexPrintf("Count limit reached\n");
+    //   break;
+    // }
   }
+  return;
 }
 
 // Connect function: Move towards qrand till qrand is reached or contact occurs
@@ -519,9 +520,12 @@ void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVerte
   MatrixXd projectedTargetMatrix(stateSize, numofParticles);
   MatrixXd dotProduct(1, numofParticles);
   VectorXd normal(stateSize);
+  
+  // Project target matrix to the contact surface of the nearest vertex
   normal << MAP_normalx(nearestVertex->particleMatrix(0,0) ,nearestVertex->particleMatrix(1,0)), MAP_normaly(nearestVertex->particleMatrix(0,0) ,nearestVertex->particleMatrix(1,0));
   dotProduct = ((targetMatrix - nearestVertex->particleMatrix).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>())).colwise().sum();
   projectedTargetMatrix = targetMatrix - (dotProduct.replicate<STATE_SIZE,1>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>());
+  
   int advance = 3;
   int targetReached = 0;
   int newContact = 0;
@@ -549,7 +553,7 @@ void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVerte
           qnew = q;
         }
         else {
-          step = step/2;
+          step = step - cell_size;
           if(step < cell_size){
             if(!IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size)){
               temp2 = 1; // New contact
@@ -652,8 +656,8 @@ int Tree::BuildRRT(double* map, int x_size, int y_size){
     mexPrintf(" EXTEND ITERATION: %d \n", i);
     float nearDist = 100000;
     qrand = RandRRT(map, x_size, y_size);
-    qrand(0) = 6.0;
-    qrand(1) = 6.0;
+    qrand(0) = 17.0;//20.0;
+    qrand(1) = 10.0;//11.0;
     
     mexPrintf("Printing qrand:\n");
     print_vector(qrand, STATE_SIZE);
@@ -686,8 +690,8 @@ int mainRun(double*  map, int x_size, int y_size, double* armstart_anglesV_rad, 
 
   //Finding map values
   short unsigned int nX, nY;
-  double x = 12.0;
-  double y = 15.0;
+  double x = 23.0;
+  double y = 5.0;
   ContXY2Cell(x, y, &nX, &nY, x_size, y_size);
   mexPrintf("\nMap value at %f, %f = %f\n", x, y, map[GETMAPINDEX(nX,nY,x_size,y_size)]);
   
