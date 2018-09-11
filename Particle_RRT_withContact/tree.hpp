@@ -57,7 +57,7 @@ public:
 	double step_size;
 	int stateSize; //size of xy
 	int numofParticles;
-	float gamma;
+	double gamma;
 	vertex* start = new vertex;
 	vertex* goal = new vertex;
 	float goalProbability;
@@ -74,11 +74,11 @@ public:
 		//Initializing start and goal
 		start->parent = NULL;
 		goal->parent = NULL;
-		step_size = 3.0;
+		step_size = 4.0;
   	stateSize = nDOFs;
   	numofParticles = NUMBEROFPARTICLES;
   	goalProbability = 0.9;
-  	maxconfigs = 1;//30000;
+  	maxconfigs = 10;
   	gamma = 0.5;
 
   	unsigned startSeed = std::chrono::system_clock::now().time_since_epoch().count();

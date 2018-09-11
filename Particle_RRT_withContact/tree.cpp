@@ -279,7 +279,7 @@ VectorXd Tree::RandRRT(double* map, int x_size, int y_size){
   uniform_real_distribution<double> distribution(0.0,1.0);
   
   double d = distribution(generator);
-  mexPrintf("Distribution generator for qrand: %f\n", d);
+  // mexPrintf("Distribution generator for qrand: %f\n", d);
   if (d<goalProbability){
     qrand = goal->particleMatrix.col(0);
   }
@@ -301,26 +301,74 @@ VectorXd Tree::RandRRT(double* map, int x_size, int y_size){
 void Tree::nearestNeighborRRT(VectorXd qrand, vertex **nearestVertex){ //Finding in the tree the nearest neighbour to qrand
 
   double shortestDistance = 10000.0;
+  double maximumDistance = 0.0;
+  double maximumCovariance = 0.0;
   double costTot = 0;
-  double difference[stateSize];
 
-  for (list<vertex*>::iterator it= vertices.begin(); it != vertices.end(); ++it)
+  VectorXd distVector;
+  VectorXd covVector;
+  distVector = VectorXd::Zero(vertices.size());
+  covVector = VectorXd::Zero(vertices.size());
+
+  double maxDist;
+  double maxCov;
+  double CovCost; //Cost resembling the standard devaition of the particle set
+  double distCost; //Cost resembling the distance of rand from the mean of the particle set
+  
+  MatrixXd deltaMatrix(stateSize,numofParticles);
+  VectorXd meanParticle(stateSize);
+  MatrixXd covMat(stateSize,stateSize);
+  int temp = 0;
+  for (list<vertex*>::iterator it1= vertices.begin(); it1 != vertices.end(); ++it1)
   {
-    
-    mexPrintf("Printing vertices matrix:\n");
-    print_particleMatrix((*it)->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+  	
+  	distCost = 0;
+  	meanParticle = ((*it1)->particleMatrix).rowwise().mean();
+  	deltaMatrix = ((*it1)->particleMatrix).colwise() - meanParticle;
+	covMat = (deltaMatrix * deltaMatrix.transpose())/numofParticles;
+	covVector(temp) = sqrt(covMat.trace());
 
-    costTot = costCalc((*it)->particleMatrix, qrand);
-    if (costTot < shortestDistance)
+	//Finding the distance of rand from the mean of the particle set
+	for (int i = 0; i < stateSize; i++){
+	  distCost += pow((qrand(i) - meanParticle(i)),2);
+	}
+	distVector(temp) = pow(distCost,0.5);
+
+    if (distVector(temp) > maximumDistance)
     {
-      mexPrintf("Printing nearest dist:%f\n", costTot);
-      shortestDistance = costTot;
-      (*nearestVertex) = (*it);
+      maximumDistance = distVector(temp);
     }
+
+    if (covVector(temp) > maximumCovariance)
+    {
+      maximumCovariance = covVector(temp);
+    }
+    temp = temp +1;
   }
 
-  mexPrintf("Printing nearestVertex matrix1:\n");
-  print_particleMatrix((*nearestVertex)->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+  mexPrintf("distVector filled: \n");
+  print_vector(distVector, vertices.size());
+
+  mexPrintf("covVector filled: \n");
+  print_vector(covVector, vertices.size());
+  mexPrintf("Printing max dist:%f\n", maximumDistance);
+  mexPrintf("Printing max cov:%f\n", maximumCovariance);
+  temp = 0;
+  for (list<vertex*>::iterator it2= vertices.begin(); it2 != vertices.end(); ++it2)
+  {
+    
+    mexPrintf("Printing vertices:\n");
+    print_particleMatrix((*it2)->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+    costTot = gamma*covVector(temp)/maximumCovariance + (1-gamma)*distVector(temp)/maximumDistance;
+    mexPrintf("Printing tot dist:%f\n", costTot);
+    if (costTot < shortestDistance)
+    {
+      shortestDistance = costTot;
+      (*nearestVertex) = (*it2);
+    }
+    temp =temp +1;
+  }
+
   return;
 }
 
@@ -342,7 +390,7 @@ int Tree::selectInput(vertex *nearestVertex){
     action = 1; //Connect
   }
   else if(nearestVertex->inContact == 1 && g < gamma){
-    action = 1;//3; //Slide
+    action = 3; //Slide
   }
   else if(nearestVertex->inContact == 1 && g > gamma){
     action = 1; //Connect
@@ -364,28 +412,28 @@ int Tree::moveToTargetOrContact(VectorXd qrand, VectorXd *qnew, double*  map, in
     if((qrand - *qnew).norm() < step_size){
       *qnew = qrand;
       advance = 0;
-      mexPrintf("TARGET REACHED\n");
+      // mexPrintf("TARGET REACHED\n");
       return advance;
     }
     else{
       q = *qnew + step*(qrand - *qnew)/(qrand - *qnew).norm(); //step towards qrand
       if(IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size)){
-        mexPrintf("STEPPED to location: ");
-        print_vector(q, STATE_SIZE);
+        // mexPrintf("STEPPED to location: ");
+        // print_vector(q, STATE_SIZE);
         short unsigned int nX, nY;
         ContXY2Cell(q(0), q(1), &nX, &nY, x_size, y_size);
-        mexPrintf("STEPPED to cell= %d, %d\n", nX, nY);
+        // mexPrintf("STEPPED to cell= %d, %d\n", nX, nY);
         *qnew = q;
       }
       else{
         step = step - cell_size;
-        mexPrintf("Step reduced to=%f\n", step);
+        // mexPrintf("Step reduced to=%f\n", step);
         if(step < cell_size){
           advance = 1;
-          mexPrintf("CONTACT MADE in move to contact function as step=%f\n", step);
+          // mexPrintf("CONTACT MADE in move to contact function as step=%f\n", step);
           short unsigned int nX, nY;
           ContXY2Cell((*qnew)(0), (*qnew)(1), &nX, &nY, x_size, y_size);
-          mexPrintf("We are presumably in contact layer at %d, %d and is it in contact layer? = %d\n", nX, nY, IsInContactLayer(toDoubleVector(*qnew, stateSize), stateSize, map, x_size, y_size));
+          // mexPrintf("We are presumably in contact layer at %d, %d and is it in contact layer? = %d\n", nX, nY, IsInContactLayer(toDoubleVector(*qnew, stateSize), stateSize, map, x_size, y_size));
           return advance;
         }
       }
@@ -404,32 +452,33 @@ void Tree::moveToContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_siz
   int advance = 1;
   // int count = 0;
   double cell_size = 1.0;
+  VectorXd qnew_init = *qnew;
   double step = step_size;
   VectorXd q(stateSize);
   while(advance == 1){
-    q = *qnew + step*(qrand - *qnew)/(qrand - *qnew).norm(); //step towards qrand
+    q = *qnew + step*(qrand - qnew_init)/(qrand - qnew_init).norm(); //step towards qrand
     if(IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size)){
-      mexPrintf("STEPPED to location: ");
-      print_vector(q, STATE_SIZE);
+      // mexPrintf("STEPPED to location: ");
+      // print_vector(q, STATE_SIZE);
       short unsigned int nX, nY;
       ContXY2Cell(q(0), q(1), &nX, &nY, x_size, y_size);
-      mexPrintf("STEPPED to cell= %d, %d\n", nX, nY);
+      // mexPrintf("STEPPED to cell= %d, %d\n", nX, nY);
       *qnew = q;
     }
     else{
       step = step - cell_size;
-      mexPrintf("Step reduced to=%f\n", step);
+      // mexPrintf("Step reduced to=%f\n", step);
       if(step < cell_size){
-        mexPrintf("CONTACT MADE in move to contact function as step=%f\n", step);
+        // mexPrintf("CONTACT MADE in move to contact function as step=%f\n", step);
         short unsigned int nX, nY;
         ContXY2Cell((*qnew)(0), (*qnew)(1), &nX, &nY, x_size, y_size);
-        mexPrintf("We are presumably in contact layer at %d, %d and is it in contact layer? = %d\n", nX, nY, IsInContactLayer(toDoubleVector(*qnew, stateSize), stateSize, map, x_size, y_size));
+        // mexPrintf("We are presumably in contact layer at %d, %d and is it in contact layer? = %d\n", nX, nY, IsInContactLayer(toDoubleVector(*qnew, stateSize), stateSize, map, x_size, y_size));
         advance = 0;
         return;
       }
     }
     // count = count +1;
-    // if(count == 20){
+    // if(count == 50){
     //   mexPrintf("Count limit reached\n");
     //   break;
     // }
@@ -440,7 +489,7 @@ void Tree::moveToContact(VectorXd qrand, VectorXd *qnew, double*  map, int x_siz
 // Connect function: Move towards qrand till qrand is reached or contact occurs
 // Returns 1 if it connects to qrand and returns 2 if it comes in contact with a wall/obstacle
 void Tree::connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVertex, double*  map, int x_size, int y_size){
-  mexPrintf("Inside connect function:\n");
+  // mexPrintf("Inside connect function:\n");
   int flag1 = 0; // is 1 if contact has occured in contact/target case
   int flag2 = 0;
   int temp1 = 0;
@@ -458,9 +507,9 @@ void Tree::connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVer
   }
 
   if (setValidity == 1){
-    mexPrintf("Qrand is Valid particle set\n");
+    // mexPrintf("Qrand is Valid particle set\n");
     for(int i = 0; i < numofParticles; i++){
-      mexPrintf("Particle: %d\n", i);
+      // mexPrintf("Particle: %d\n", i);
       qrand = targetMatrix.col(i);
       qnew = nearestVertex->particleMatrix.col(i);
       temp1 = moveToTargetOrContact(qrand, &qnew, map, x_size, y_size); //Returns 1 if contact occurs
@@ -469,10 +518,10 @@ void Tree::connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVer
     }
   }
   else{
-    mexPrintf("Qrand is Invalid particle set\n");
+    // mexPrintf("Qrand is Invalid particle set\n");
     flag2 = 1;
     for(int i = 0; i < numofParticles; i++){
-      mexPrintf("Particle: %d\n", i);
+      // mexPrintf("Particle: %d\n", i);
       qrand = targetMatrix.col(i);
       qnew = nearestVertex->particleMatrix.col(i);
       moveToContact(qrand, &qnew, map, x_size, y_size);
@@ -488,6 +537,7 @@ void Tree::connect(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVer
 
   (*newVertex)->parent = nearestVertex;
   nearestVertex->children.push_back((*newVertex));
+  
   return;
 }
 
@@ -507,96 +557,134 @@ void Tree::guarded(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVer
 
   (*newVertex)->parent = nearestVertex;
   nearestVertex->children.push_back((*newVertex));
+  
   return;
 }
 
-//moveToTargetOrContact: Returns 1 if new contact occurs, returns 2 if contact is lost, returns 3 if target(qrand) is reached
+//moveToTargetOrContact: Returns 1 if new contact occurs, returns 2 if contact is lost(wont occur for obstacles), returns 3 if target(qrand) is reached
 //qrand is a Valid Configuration
 void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVertex, double*  map, int x_size, int y_size){
   double cell_size = 1.0;
+  // mexPrintf("Inside slide function:\n");
+  int flag1 = 0; // is 1 if contact has occured in contact/target case
+  int flag2 = 0;
+  int temp1 = 0;
+  int temp2 = 0;
   VectorXd qrand(stateSize);
   VectorXd qnew(stateSize);
-  VectorXd q(stateSize);
+  int setValidity = 1;
+  (*newVertex)->inContact = 0;
+
+  // VectorXd q(stateSize);
   MatrixXd projectedTargetMatrix(stateSize, numofParticles);
   MatrixXd dotProduct(1, numofParticles);
   VectorXd normal(stateSize);
-  
+
   // Project target matrix to the contact surface of the nearest vertex
   normal << MAP_normalx(nearestVertex->particleMatrix(0,0) ,nearestVertex->particleMatrix(1,0)), MAP_normaly(nearestVertex->particleMatrix(0,0) ,nearestVertex->particleMatrix(1,0));
   dotProduct = ((targetMatrix - nearestVertex->particleMatrix).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>())).colwise().sum();
   projectedTargetMatrix = targetMatrix - (dotProduct.replicate<STATE_SIZE,1>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>());
   
-  int advance = 3;
-  int targetReached = 0;
-  int newContact = 0;
-  int lostContact = 0;
-  pair<double,double> newContactSurface;
-  VectorXd pointOnNewContactSurf(stateSize);
-  VectorXd lostContactEdge(stateSize);
+  // int advance = 3;
+  // int targetReached = 0;
+  // int newContact = 0;
+  // int lostContact = 0;
+  // pair<double,double> newContactSurface;
+  // VectorXd pointOnNewContactSurf(stateSize);
+  // VectorXd lostContactEdge(stateSize);
 
+  // Check particle set for validity
   for(int i = 0; i < numofParticles; i++){
-    qrand = targetMatrix.col(i);
-    qnew = nearestVertex->particleMatrix.col(i);
-    double step = step_size;
-    int temp1 = 0;
-    int temp2 = 0;
-    int temp3 = 0;
-
-    while((temp1+temp2+temp3) == 0){
-      if((qrand - qnew).norm() < step_size){
-        qnew = qrand;
-        temp1 = 1;
-      }
-      else{
-        q = qnew + step*(qrand - qnew)/(qrand - qnew).norm(); //step towards qrand
-        if(IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size) && IsInContactLayer(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size) == 1){
-          qnew = q;
-        }
-        else {
-          step = step - cell_size;
-          if(step < cell_size){
-            if(!IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size)){
-              temp2 = 1; // New contact
-              // newContactSurface = pair(MAP_normalx(qnew(0), qnew(1)), MAP_normaly(qnew(0), qnew(1)));
-              pointOnNewContactSurf = qnew;
-            }
-            else{
-              lostContactEdge = qnew;
-              temp3 = 1; //Lost contact
-            }
-          }
-        }
-      }
+    if (!IsValidState(toDoubleVector(projectedTargetMatrix.col(i), stateSize), stateSize, map, x_size, y_size)){
+      setValidity = 0;
     }
-    (*newVertex)->particleMatrix.col(i) = qnew;
-    targetReached = MAX(targetReached, temp1);
-    newContact = MAX(newContact, temp2);
-    lostContact = MAX(lostContact, temp3);
   }
 
-  if(newContact > 0){
-    advance = 1;
-    normal[0] = MAP_normalx(pointOnNewContactSurf[0], pointOnNewContactSurf[1]);
-    normal[1] = MAP_normaly(pointOnNewContactSurf[0], pointOnNewContactSurf[1]);
-    dotProduct = (((*newVertex)->particleMatrix - pointOnNewContactSurf.replicate<1,NUMBEROFPARTICLES>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>())).colwise().sum();
-    (*newVertex)->particleMatrix = (*newVertex)->particleMatrix - (dotProduct.replicate<STATE_SIZE,1>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>());
-    
-    // newVertex->particleMatrix = newVertex->particleMatrix.colwise() - ( (newVertex->particleMatrix.colwise() - pointOnNewContactSurf).transpose()*normal )*normal;
-    // projectOnContSurf(newVertex, newContactSurface);
-    (*newVertex)->inContact = 1;
+  if (setValidity == 1){
+    // mexPrintf("Qrand is Valid particle set\n");
+    for(int i = 0; i < numofParticles; i++){
+      // mexPrintf("Particle: %d\n", i);
+      qrand = projectedTargetMatrix.col(i);
+      qnew = nearestVertex->particleMatrix.col(i);
+      temp1 = moveToTargetOrContact(qrand, &qnew, map, x_size, y_size); //Returns 1 if contact occurs
+      flag1 = MAX(temp1, flag1);
+      (*newVertex)->particleMatrix.col(i) = qnew;
+    }
   }
-  else if(lostContact > 0){
-    advance = 2;
-    // ----------------------- Include this later, how to do it in higher dimensions?-----------------------------
-    // projectToLostContact(newVertex, newContactSurface);
-    (*newVertex)->inContact = 0;
+  else{
+    // mexPrintf("Qrand is Invalid particle set\n");
+    flag2 = 1;
+    for(int i = 0; i < numofParticles; i++){
+      // mexPrintf("Particle: %d\n", i);
+      qrand = projectedTargetMatrix.col(i);
+      qnew = nearestVertex->particleMatrix.col(i);
+      moveToContact(qrand, &qnew, map, x_size, y_size);
+      (*newVertex)->particleMatrix.col(i) = qnew;
+    }
+
   }
+  
+  // for(int i = 0; i < numofParticles; i++){
+  //   qrand = projectedTargetMatrix.col(i);
+  //   qnew = nearestVertex->particleMatrix.col(i);
+  //   double step = step_size;
+    // int temp1 = 0;
+    // int temp2 = 0;
+    // int temp3 = 0;
+
+    // while((temp1+temp2+temp3) == 0){ 
+    //   if((qrand - qnew).norm() < cell_size){
+    //     step = step - cell_size;
+    //     qnew = qrand;
+    //     temp1 = 1;
+    //   }
+    //   else{
+    //     q = qnew + step*(qrand - qnew)/(qrand - qnew).norm(); //step towards qrand
+    //     if(IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size) && IsInContactLayer(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size) == 1){
+    //       qnew = q;
+    //     }
+    //     else {
+    //       step = step - cell_size;
+    //       if(step < cell_size){
+    //         if(!IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size)){
+    //           temp2 = 1; // New contact
+    //           // newContactSurface = pair(MAP_normalx(qnew(0), qnew(1)), MAP_normaly(qnew(0), qnew(1)));
+    //           pointOnNewContactSurf = qnew;
+    //         }
+    //         else{
+    //           lostContactEdge = qnew;
+    //           temp3 = 1; //Lost contact
+    //         }
+    //       }
+    //     }
+    //   }
+    // }
+
+      //Setting the inContact parameter
+	if(MAX(flag1, flag2)){
+	  (*newVertex)->inContact = 1;
+	}
+	(*newVertex)->parent = nearestVertex;
+	nearestVertex->children.push_back((*newVertex));
+  	
+
+  // if(newContact > 0){
+  //   advance = 1;
+  //   normal[0] = MAP_normalx(pointOnNewContactSurf[0], pointOnNewContactSurf[1]);
+  //   normal[1] = MAP_normaly(pointOnNewContactSurf[0], pointOnNewContactSurf[1]);
+  //   dotProduct = (((*newVertex)->particleMatrix - pointOnNewContactSurf.replicate<1,NUMBEROFPARTICLES>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>())).colwise().sum();
+  //   (*newVertex)->particleMatrix = (*newVertex)->particleMatrix - (dotProduct.replicate<STATE_SIZE,1>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>());
+  //   (*newVertex)->inContact = 1;
+  // }
+  // else if(lostContact > 0){
+  //   advance = 2;
+  //   // ----------------------- Include this later, how to do it in higher dimensions?-----------------------------
+  //   // projectToLostContact(newVertex, newContactSurface);
+  //   (*newVertex)->inContact = 0;
+  // }
 
   // motion_model(newVertex);
   // project(newVertex);
-
-  (*newVertex)->parent = nearestVertex;
-  nearestVertex->children.push_back((*newVertex));
   return;
 }
 
@@ -612,6 +700,7 @@ int Tree::extendRRT(VectorXd qrand, double*  map, int x_size, int y_size){ //Ext
 
   // Finding the nearest vertex to qrand
   nearestNeighborRRT(qrand, &nearestVertex);
+  mexPrintf("Nearest neighbour contact state = %d\n", nearestVertex->inContact);
   mexPrintf("Printing nearestVertex matrix: \n");
   print_particleMatrix(nearestVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
 
@@ -623,8 +712,8 @@ int Tree::extendRRT(VectorXd qrand, double*  map, int x_size, int y_size){ //Ext
 
   //Find qtarget = qrand + (qnearest - qnearestmean) to extend nearest vertex to:
   targetMatrix = qrand.replicate<1,NUMBEROFPARTICLES>() + (nearestVertex->particleMatrix - (nearestVertex->particleMatrix.rowwise().mean()).replicate<1,NUMBEROFPARTICLES>());
-  mexPrintf("Printing target matrix:\n");
-  print_particleMatrix(targetMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+  // mexPrintf("Printing target matrix:\n");
+  // print_particleMatrix(targetMatrix, STATE_SIZE, NUMBEROFPARTICLES);
 
   //Calling functions based on actions selected
   switch(action) {
@@ -635,14 +724,16 @@ int Tree::extendRRT(VectorXd qrand, double*  map, int x_size, int y_size){ //Ext
   //newVertex added is a valid config so is added to the tree
 
   //Check distance to goal, return 1 if goal is reached
-  mexPrintf("Printing newVertex matrix:\n");
-  print_particleMatrix(newVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
-  
+  // mexPrintf("Printing newVertex matrix:\n");
+  // print_particleMatrix(newVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+  vertices.push_back(newVertex);
   if((newVertex->particleMatrix.rowwise().mean() - goal->particleMatrix.col(0)).norm() < step_size){
     flag == 1; //Goal reached
     goal->parent = newVertex;
     newVertex->children.push_back(goal);
+    vertices.push_back(goal);
   }
+
   return flag;
 }
 //return 1 if goal is reached
@@ -653,17 +744,18 @@ int Tree::BuildRRT(double* map, int x_size, int y_size){
   int i;
 
   for (i = 1; i <=maxconfigs; i++){
-    mexPrintf(" EXTEND ITERATION: %d \n", i);
+    // mexPrintf(" EXTEND ITERATION: %d \n", i);
     float nearDist = 100000;
     qrand = RandRRT(map, x_size, y_size);
     qrand(0) = 17.0;//20.0;
     qrand(1) = 10.0;//11.0;
     
-    mexPrintf("Printing qrand:\n");
-    print_vector(qrand, STATE_SIZE);
+    // mexPrintf("Printing qrand:\n");
+    // print_vector(qrand, STATE_SIZE);
 
     int flag = extendRRT(qrand, map, x_size, y_size);
-    
+    mexPrintf(" \nSize of vertices list=%d \n", vertices.size());
+
     if(flag == 1){
       mexPrintf(" GOAL REACHED!! \n");
       return 1; //Goal reached
