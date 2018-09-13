@@ -33,7 +33,8 @@ fprintf(1, 'plan of length %d was found\n', size(armplan,1));
 %     'MarkerEdgeColor','r',...
 %     'MarkerFaceColor',[0.5,0.5,0.5]);
 
-for i = 1:size(armplanlength)
+%draw the plan
+for i = 1:armplanlength
     k = 1;
     for j = 1: size(armstart,2): numOfParticles*size(armstart,2)
         particlex(k) = armplan(i,j);
@@ -41,8 +42,10 @@ for i = 1:size(armplanlength)
         k = k+1;
     end
     scatter(particley,particlex,'filled');
+    hold on;
+    pause(2);
 end
-    pause(0.5);
+    
 end
 
 %armplan

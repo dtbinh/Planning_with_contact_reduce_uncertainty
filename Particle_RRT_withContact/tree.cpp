@@ -286,15 +286,17 @@ VectorXd Tree::RandRRT(double* map, int x_size, int y_size){
   else{
     //random value in the range of map
 
-    qrand(0) = x_size*(distribution(generator));
-    qrand(1) = y_size*(distribution(generator));
+    qrand(0) = static_cast<double>(x_size)*(distribution(generator));
+    qrand(1) = static_cast<double>(y_size)*(distribution(generator));
   }
 
+  // mexPrintf("Printing typecast xsize: %f \n", static_cast<double>(x_size));
   if (!IsValidState(toDoubleVector(qrand, stateSize), stateSize, map, x_size, y_size))
   {
     qrand = RandRRT(map, x_size, y_size);
   }
-
+  // mexPrintf("Printing qrand in function:\n");
+	// print_vector(qrand, STATE_SIZE);
   return qrand;
 }
 
@@ -303,7 +305,7 @@ void Tree::nearestNeighborRRT(VectorXd qrand, vertex **nearestVertex){ //Finding
   double shortestDistance = 10000.0;
   double maximumDistance = 0.0;
   double maximumCovariance = 0.0;
-  double costTot = 0;
+  double costTot = 0.0;
 
   VectorXd distVector;
   VectorXd covVector;
@@ -312,8 +314,9 @@ void Tree::nearestNeighborRRT(VectorXd qrand, vertex **nearestVertex){ //Finding
 
   double maxDist;
   double maxCov;
+  //Normalized values
   double CovCost; //Cost resembling the standard devaition of the particle set
-  double distCost; //Cost resembling the distance of rand from the mean of the particle set
+  double distCost = 0.0; //Cost resembling the distance of rand from the mean of the particle set
   
   MatrixXd deltaMatrix(stateSize,numofParticles);
   VectorXd meanParticle(stateSize);
@@ -322,51 +325,51 @@ void Tree::nearestNeighborRRT(VectorXd qrand, vertex **nearestVertex){ //Finding
   for (list<vertex*>::iterator it1= vertices.begin(); it1 != vertices.end(); ++it1)
   {
   	
-  	distCost = 0;
+  	distCost = 0.0;
   	meanParticle = ((*it1)->particleMatrix).rowwise().mean();
   	deltaMatrix = ((*it1)->particleMatrix).colwise() - meanParticle;
 	covMat = (deltaMatrix * deltaMatrix.transpose())/numofParticles;
-	covVector(temp) = sqrt(covMat.trace());
+	covVector[temp] = sqrt(covMat.trace());
 
 	//Finding the distance of rand from the mean of the particle set
 	for (int i = 0; i < stateSize; i++){
-	  distCost += pow((qrand(i) - meanParticle(i)),2);
+	  distCost += pow((qrand[i] - meanParticle[i]),2);
 	}
 	distVector(temp) = pow(distCost,0.5);
 
-    if (distVector(temp) > maximumDistance)
+    if (distVector[temp] > maximumDistance)
     {
-      maximumDistance = distVector(temp);
+      maximumDistance = distVector[temp];
     }
 
-    if (covVector(temp) > maximumCovariance)
+    if (covVector[temp] > maximumCovariance)
     {
-      maximumCovariance = covVector(temp);
+      maximumCovariance = covVector[temp];
     }
     temp = temp +1;
   }
 
-  mexPrintf("distVector filled: \n");
-  print_vector(distVector, vertices.size());
+  // mexPrintf("distVector filled: \n");
+  // print_vector(distVector, vertices.size());
 
-  mexPrintf("covVector filled: \n");
-  print_vector(covVector, vertices.size());
-  mexPrintf("Printing max dist:%f\n", maximumDistance);
-  mexPrintf("Printing max cov:%f\n", maximumCovariance);
+  // mexPrintf("covVector filled: \n");
+  // print_vector(covVector, vertices.size());
+  // mexPrintf("Printing max dist:%f\n", maximumDistance);
+  // mexPrintf("Printing max cov:%f\n", maximumCovariance);
   temp = 0;
   for (list<vertex*>::iterator it2= vertices.begin(); it2 != vertices.end(); ++it2)
   {
     
-    mexPrintf("Printing vertices:\n");
-    print_particleMatrix((*it2)->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
-    costTot = gamma*covVector(temp)/maximumCovariance + (1-gamma)*distVector(temp)/maximumDistance;
-    mexPrintf("Printing tot dist:%f\n", costTot);
+    // mexPrintf("Printing vertices:\n");
+    // print_particleMatrix((*it2)->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+    costTot = gamma*covVector[temp]/maximumCovariance + (1-gamma)*distVector[temp]/maximumDistance;
+    // mexPrintf("Printing tot dist:%f\n", costTot);
     if (costTot < shortestDistance)
     {
       shortestDistance = costTot;
       (*nearestVertex) = (*it2);
     }
-    temp =temp +1;
+    temp = temp +1;
   }
 
   return;
@@ -384,7 +387,7 @@ int Tree::selectInput(vertex *nearestVertex){
   double g = distribution(generator);
 
   if(nearestVertex->inContact == 0 && g < gamma){
-    action = 2; //Guarded
+    action = 2; //Guarded: Come in contact along the direction of target
   }
   else if(nearestVertex->inContact == 0 && g > gamma){
     action = 1; //Connect
@@ -600,7 +603,7 @@ void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVerte
     }
   }
 
-  if (setValidity == 1){
+  if (setValidity == 1){ //If it is a valid particle set directly move to it unless you get a contact in between
     // mexPrintf("Qrand is Valid particle set\n");
     for(int i = 0; i < numofParticles; i++){
       // mexPrintf("Particle: %d\n", i);
@@ -611,7 +614,7 @@ void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVerte
       (*newVertex)->particleMatrix.col(i) = qnew;
     }
   }
-  else{
+  else{ //If it is an invalid particle set move to the contact in the direction of target matrix
     // mexPrintf("Qrand is Invalid particle set\n");
     flag2 = 1;
     for(int i = 0; i < numofParticles; i++){
@@ -695,18 +698,19 @@ int Tree::extendRRT(VectorXd qrand, double*  map, int x_size, int y_size){ //Ext
 
   vertex *nearestVertex = new vertex;
   vertex *newVertex = new vertex;
-  double *check = new double[stateSize];
+  
   newVertex->particleMatrix = MatrixXd::Zero(stateSize, numofParticles);
 
   // Finding the nearest vertex to qrand
   nearestNeighborRRT(qrand, &nearestVertex);
-  mexPrintf("Nearest neighbour contact state = %d\n", nearestVertex->inContact);
-  mexPrintf("Printing nearestVertex matrix: \n");
-  print_particleMatrix(nearestVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+  // mexPrintf("Nearest neighbour contact state = %d\n", nearestVertex->inContact);
+  // mexPrintf("Printing nearestVertex matrix: \n");
+  // print_particleMatrix(nearestVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
 
   
   //Finding the action to take based on nearest node
   int action = selectInput(nearestVertex);
+
   mexPrintf("Action taken = %d\n", action);
   MatrixXd targetMatrix(stateSize, numofParticles);
 
@@ -728,7 +732,7 @@ int Tree::extendRRT(VectorXd qrand, double*  map, int x_size, int y_size){ //Ext
   // print_particleMatrix(newVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
   vertices.push_back(newVertex);
   if((newVertex->particleMatrix.rowwise().mean() - goal->particleMatrix.col(0)).norm() < step_size){
-    flag == 1; //Goal reached
+    flag = 1; //Goal reached
     goal->parent = newVertex;
     newVertex->children.push_back(goal);
     vertices.push_back(goal);
@@ -741,20 +745,16 @@ int Tree::BuildRRT(double* map, int x_size, int y_size){
 
   VectorXd qrand;
 
-  int i;
-
-  for (i = 1; i <=maxconfigs; i++){
-    // mexPrintf(" EXTEND ITERATION: %d \n", i);
-    float nearDist = 100000;
+  for (int i = 1; i <=maxconfigs; i++){
+    mexPrintf(" EXTEND ITERATION: %d \n", i);
+    
     qrand = RandRRT(map, x_size, y_size);
-    qrand(0) = 17.0;//20.0;
-    qrand(1) = 10.0;//11.0;
     
     // mexPrintf("Printing qrand:\n");
     // print_vector(qrand, STATE_SIZE);
 
     int flag = extendRRT(qrand, map, x_size, y_size);
-    mexPrintf(" \nSize of vertices list=%d \n", vertices.size());
+    // mexPrintf(" Size of vertices list after extend=%d \n\n", vertices.size());
 
     if(flag == 1){
       mexPrintf(" GOAL REACHED!! \n");
@@ -785,7 +785,7 @@ int mainRun(double*  map, int x_size, int y_size, double* armstart_anglesV_rad, 
   double x = 23.0;
   double y = 5.0;
   ContXY2Cell(x, y, &nX, &nY, x_size, y_size);
-  mexPrintf("\nMap value at %f, %f = %f\n", x, y, map[GETMAPINDEX(nX,nY,x_size,y_size)]);
+  // mexPrintf("\nMap value at %f, %f = %f\n", x, y, map[GETMAPINDEX(nX,nY,x_size,y_size)]);
   
   // mexPrintf("Printing map:\n");
   // for(int i = 0; i < x_size; i++){
@@ -797,7 +797,7 @@ int mainRun(double*  map, int x_size, int y_size, double* armstart_anglesV_rad, 
   
   goalReached = tree.BuildRRT(map, x_size, y_size);
   int len = 0;
-
+  
   vertex* temp = new vertex;
   temp = tree.goal;
   vector<Eigen::MatrixXd,Eigen::aligned_allocator<Eigen::MatrixXd> > pathVec;
