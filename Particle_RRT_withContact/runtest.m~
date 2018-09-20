@@ -49,7 +49,7 @@ for i = 1:armplanlength
     text(armstart(2),armstart(1),'Start');
     text(armgoal(2),armgoal(1),'Goal');
     hold on;
-    plot(meany, meanx, 'w-o', 'linewidth', 3);
+    plot(meany, meanx, );
     hold on;
     
     pause(2);

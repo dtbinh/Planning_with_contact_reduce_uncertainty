@@ -703,9 +703,9 @@ int Tree::extendRRT(VectorXd qrand, double*  map, int x_size, int y_size){ //Ext
 
   // Finding the nearest vertex to qrand
   nearestNeighborRRT(qrand, &nearestVertex);
-  // mexPrintf("Nearest neighbour contact state = %d\n", nearestVertex->inContact);
-  // mexPrintf("Printing nearestVertex matrix: \n");
-  // print_particleMatrix(nearestVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+  mexPrintf("Nearest neighbour contact state = %d\n", nearestVertex->inContact);
+  mexPrintf("Printing nearestVertex matrix: \n");
+  print_particleMatrix(nearestVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
 
   
   //Finding the action to take based on nearest node
@@ -728,8 +728,8 @@ int Tree::extendRRT(VectorXd qrand, double*  map, int x_size, int y_size){ //Ext
   //newVertex added is a valid config so is added to the tree
 
   //Check distance to goal, return 1 if goal is reached
-  // mexPrintf("Printing newVertex matrix:\n");
-  // print_particleMatrix(newVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
+  mexPrintf("Printing newVertex matrix:\n");
+  print_particleMatrix(newVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
   vertices.push_back(newVertex);
   if((newVertex->particleMatrix.rowwise().mean() - goal->particleMatrix.col(0)).norm() < step_size){
     flag = 1; //Goal reached
