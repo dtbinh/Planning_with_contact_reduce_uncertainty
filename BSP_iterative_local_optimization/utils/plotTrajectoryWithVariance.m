@@ -5,58 +5,58 @@ function plotTrajectoryWithVariance(t0, b_new, u_new)
     u = u_new;
     x = b_new(1:nState, :);
     sigmaVec = b_new(nState + 1:end, :);
-    set(gcf,'units','points','position',[10,10,700,700])
+%     set(gcf,'units','points','position',[10,10,700,700])
     
-    subplot(323), hold on %PLOT control input ux
+    subplot(423), hold on %PLOT control input ux
     plot(t0,u(1,:),'LineWidth',2);
     title(['Control (ux)'], 'FontSize',24);
     grid on; xlabel('$t$', 'FontSize',24, 'Interpreter', 'latex'); ylabel('$u_x(t)$', 'FontSize',24, 'Interpreter', 'latex');
     % xticks([-2*pi -pi 0 pi 2*pi]); xticklabels({'-2\pi','-\pi','0','\pi','2\pi'});
     set(gca,'fontsize',18)
     % axis square;
-    xlim([0 T]); ylim([-umax umax])
+    xlim([0 T]); ylim([-70 60])
     hold on;
 
-    subplot(324), hold on; %PLOT control input uy
+    subplot(424), hold on; %PLOT control input uy
     plot(t0,u(2,:),'LineWidth',2);
     title(['Control (uy)'], 'FontSize',24);
     grid on; xlabel('$t$', 'FontSize',24, 'Interpreter', 'latex'); ylabel('$u_y(t)$', 'FontSize',24, 'Interpreter', 'latex');
     % xticks([-2*pi -pi 0 pi 2*pi]); xticklabels({'-2\pi','-\pi','0','\pi','2\pi'});
     set(gca,'fontsize',18)
     % axis square;
-    xlim([0 T]); ylim([-umax umax])
+    xlim([0 T]); ylim([-70 60])
     hold on;
 
-    subplot(321), hold on %PLOT control input ux
+    subplot(421), hold on %PLOT control input ux
     plot(t0,x(1,:),'LineWidth',2);
     title(['State (x)'], 'FontSize',24);
     grid on; xlabel('$t$', 'FontSize',24, 'Interpreter', 'latex'); ylabel('$x(t)$', 'FontSize',24, 'Interpreter', 'latex');
     % xticks([-2*pi -pi 0 pi 2*pi]); xticklabels({'-2\pi','-\pi','0','\pi','2\pi'});
     set(gca,'fontsize',18)
     % axis square;
-    xlim([0 T]); ylim([x0(1) xf(1)])
+    xlim([0 T]); ylim([0 mapxmax/2])
     hold on;
 
-    subplot(322), hold on; %PLOT control input uy
+    subplot(422), hold on; %PLOT control input uy
     plot(t0,x(2,:),'LineWidth',2);
     title(['State (y)'], 'FontSize',24);
     grid on; xlabel('$t$', 'FontSize',24, 'Interpreter', 'latex'); ylabel('$y(t)$', 'FontSize',24, 'Interpreter', 'latex');
     % xticks([-2*pi -pi 0 pi 2*pi]); xticklabels({'-2\pi','-\pi','0','\pi','2\pi'});
     set(gca,'fontsize',18)
     % axis square;
-    xlim([0 T]); ylim([x0(2) xf(2)])
+    xlim([0 T]); ylim([0 mapymax])
     hold on;
 
-    subplot(3,2,[5,6]), hold on; %Phase Plot
+    subplot(4,2,[5,6,7,8]), hold on; %Phase Plot
     plot(x(1,:),x(2,:),'LineWidth',2);
     title(['Trajectory'], 'FontSize',24);
     grid on; xlabel('$x$', 'FontSize',24, 'Interpreter', 'latex'); ylabel('$y$', 'FontSize',24, 'Interpreter', 'latex');
     % xticks([-2*pi -pi 0 pi 2*pi]); xticklabels({'-2\pi','-\pi','0','\pi','2\pi'});
     set(gca,'fontsize',18)
-    % axis square;
+%     axis square;
     xlim([0 mapxmax]); ylim([0 mapymax])
     hold on;
-    for i = 1:10:N
+    for i = 1:9:N+1
         plot_gaussian_ellipsoid(x(:,i), vecTosigma(sigmaVec(:,i), nState))
         hold on;
     end

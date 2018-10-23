@@ -5,7 +5,7 @@
 clc;
 clear all;
 close all;
-addpath('/media/saumya/Data/Study/CMU/Robotics/PlanningWithContact/Codes/BSP_assumingMaxLikelihood/utils');
+addpath('/media/saumya/Data/Study/CMU/Robotics/PlanningWithContact/Codes/Planning_with_contact_to_reduce_uncertainty/BSP_iterative_local_optimization/utils');
 global nState mControl pMeasure xf x0 N dt umax T Amp sig mu F G Fi Gi ei Qt_full P R q r p mapxmax mapymax delx delu delsig Mt Rt Qf Qt S1T s2T s3T x_nom0 sigmanom0 u_nom0
 
 %% Declaring parameters
@@ -19,8 +19,8 @@ dt = 0.1 ;%time step for Euler Integration
 T = N*dt ;%total time
 t0 = [linspace(0,T,N)]';
 
-x0 = [0;0];
-xf = [20;30];
+x0 = [10;20];
+xf = [20;70];
 umax = inf ;%upper control bound (optimization variable)
 
 % Parameters for the onbservation map
@@ -46,9 +46,9 @@ Qt = 200*eye(nState);  % sigma*Qt*sigma
 Qf = 100*N*eye(nState); %x'*Qf*x + sigma*Qf*sigma
 
 %% Loading nominal trajectory
-load nominalTraj_X.mat
-load nominalTraj_U.mat
-load nominalTraj_t0.mat
+load nominalTraj_X_origin15_15.mat
+load nominalTraj_U_origin15_15.mat
+load nominalTraj_t0_origin15_15.mat
 
 %% Setting up fmincon to find nominal trajectory
 % A = [] ;%empty because no linear equations
@@ -73,25 +73,28 @@ load nominalTraj_t0.mat
 % for i = 1:mControl
 %     u = [u; params(nState*N+N*(i-1)+1:nState*N+N*i)];
 % end
-% save('nominalTraj_X.mat', 'x');
-% save('nominalTraj_U.mat', 'u');
-% save('nominalTraj_t0.mat', 't0');
+% save('nominalTraj_X_origin15_15.mat', 'x');
+% save('nominalTraj_U_origin15_15.mat', 'u');
+% save('nominalTraj_t0_origin15_15.mat', 't0');
 x_nom0 = x;
 u_nom0 = u;
 
 %% Plotting initial trajectory and environment
-figure;
+figure(1);
+set(gcf,'units','points','position',[10,10,700,700])
 % Observation environment variance
-subplot(3,2,[5,6])
+subplot(4,2,[5,6,7,8])
 mapx = 0:mapxmax;
 mapy = 0:mapymax;
 [mapX,mapY] = meshgrid(mapx,mapy);
+
 % contZvar = Amp*exp(-(mapX - mu).^2/sig);
 contZvar = Amp*(mu - mapX).^2;
-contourf(mapX,mapY,contZvar,10)
+conto = contourf(mapX,mapY,contZvar,50, 'edgecolor','none');
+colormap(flipud(gray));
 hold on;
 % Plotting nominal trajectory
-plotNominalTraj(t0, x_nom0, u_nom0);
+% plotNominalTraj(t0, x_nom0, u_nom0);
 hold on;
 
 %% Initializing Nominal belief trajectory
@@ -103,9 +106,14 @@ u_nom = u_nom0;
 
 
 outer_iter = 1;
-max_iterations_outer = 20;
+max_iterations_outer = 10;
 
-
+% Create a movie structure to add frames to
+mov(1:max_iterations_outer) = struct('cdata', [], 'colormap', []);
+% Create a video writer to use the writeVideo function
+v = VideoWriter('BSP_iterative_local_optimization_2.avi');
+% Make the video writer available for writing
+open(v);
 
 %% iLQG loop
 while(outer_iter <= max_iterations_outer) % or l(t) <lt
@@ -130,9 +138,15 @@ while(outer_iter <= max_iterations_outer) % or l(t) <lt
     
     b_nom = b_new;
     u_nom = u_new;
-
-    outer_iter = outer_iter +1;
     
+    % Video writing
+    ax = gcf();
+    mov(outer_iter) = getframe(ax);
+    % Write frame to the video writer "v"
+    writeVideo(v,mov(outer_iter));
+    
+    outer_iter = outer_iter +1;
     pause(0.01);
 
 end
+close(v);
