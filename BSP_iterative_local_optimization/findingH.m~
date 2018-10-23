@@ -1,0 +1,11 @@
+function H = findingH(x,u)
+    % finite differential of the measurement function
+    global nState pMeasure
+    H = zeros(pMeasure, nState)
+    for i = 1:nState
+        dx = zeros(nState, 1);
+        dx(j) = delx; 
+        H(:,i) = 
+    end
+    
+end

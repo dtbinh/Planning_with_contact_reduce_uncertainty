@@ -79,7 +79,7 @@ public:
   	numofParticles = NUMBEROFPARTICLES;
   	goalProbability = 0.5;
   	maxconfigs = 30;
-  	gamma = 0.8;
+  	gamma = 0.5;
 
   	unsigned startSeed = std::chrono::system_clock::now().time_since_epoch().count();
   	default_random_engine generator(startSeed);

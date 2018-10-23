@@ -15,7 +15,7 @@ hold on;
 [armplan, armplanlength, numOfParticles] = armplanner(envmap, armstart, armgoal); 
 
 fprintf(1, 'plan of length %d was found\n', size(armplan,1));
-
+save('plan_outputs2.mat','armplan','armplanlength','armplanlength');
 %draw the plan
 % midx = size(envmap,2)/2;
 % x = zeros(length(armstart)+1,1);
@@ -36,6 +36,15 @@ fprintf(1, 'plan of length %d was found\n', size(armplan,1));
 %draw the plan
 meanx = [];
 meany = [];
+% Create a movie structure to add frames to
+mov(1:armplanlength) = struct('cdata', [], 'colormap', []);
+
+% Create a video writer to use the writeVideo function
+v = VideoWriter('ParticleRRTContacts2.avi');
+
+% Make the video writer available for writing
+open(v);
+set(gcf,'units','points','position',[10,10,1000,1000])
 for i = 1:armplanlength
     k = 1;
     for j = 1: size(armstart,2): numOfParticles*size(armstart,2)
@@ -45,16 +54,24 @@ for i = 1:armplanlength
     end
     meanx = [meanx mean(particlex)];
     meany = [meany mean(particley)];
+    
     scatter(particley,particlex,'filled');
+    set(gca,'fontsize',18)
     text(armstart(2),armstart(1),'Start');
     text(armgoal(2),armgoal(1),'Goal');
     hold on;
+    
     plot(meany, meanx, 'w-o', 'linewidth', 3);
     hold on;
-    
+    ax = gcf();
+    mov(i) = getframe(ax);
+%     [X,Map] = frame2im(mov(i));
+% %     Write frame to the video writer "v"
+    writeVideo(v,mov(i));
     pause(2);
 end
-    
+%     movie(fig1,A,30,3,winsize)
+    close(v);
 end
 
 %armplan

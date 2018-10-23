@@ -587,14 +587,6 @@ void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVerte
   normal << MAP_normalx(nearestVertex->particleMatrix(0,0) ,nearestVertex->particleMatrix(1,0)), MAP_normaly(nearestVertex->particleMatrix(0,0) ,nearestVertex->particleMatrix(1,0));
   dotProduct = ((targetMatrix - nearestVertex->particleMatrix).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>())).colwise().sum();
   projectedTargetMatrix = targetMatrix - (dotProduct.replicate<STATE_SIZE,1>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>());
-  
-  // int advance = 3;
-  // int targetReached = 0;
-  // int newContact = 0;
-  // int lostContact = 0;
-  // pair<double,double> newContactSurface;
-  // VectorXd pointOnNewContactSurf(stateSize);
-  // VectorXd lostContactEdge(stateSize);
 
   // Check particle set for validity
   for(int i = 0; i < numofParticles; i++){
@@ -626,42 +618,6 @@ void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVerte
     }
 
   }
-  
-  // for(int i = 0; i < numofParticles; i++){
-  //   qrand = projectedTargetMatrix.col(i);
-  //   qnew = nearestVertex->particleMatrix.col(i);
-  //   double step = step_size;
-    // int temp1 = 0;
-    // int temp2 = 0;
-    // int temp3 = 0;
-
-    // while((temp1+temp2+temp3) == 0){ 
-    //   if((qrand - qnew).norm() < cell_size){
-    //     step = step - cell_size;
-    //     qnew = qrand;
-    //     temp1 = 1;
-    //   }
-    //   else{
-    //     q = qnew + step*(qrand - qnew)/(qrand - qnew).norm(); //step towards qrand
-    //     if(IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size) && IsInContactLayer(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size) == 1){
-    //       qnew = q;
-    //     }
-    //     else {
-    //       step = step - cell_size;
-    //       if(step < cell_size){
-    //         if(!IsValidState(toDoubleVector(q, stateSize), stateSize, map, x_size, y_size)){
-    //           temp2 = 1; // New contact
-    //           // newContactSurface = pair(MAP_normalx(qnew(0), qnew(1)), MAP_normaly(qnew(0), qnew(1)));
-    //           pointOnNewContactSurf = qnew;
-    //         }
-    //         else{
-    //           lostContactEdge = qnew;
-    //           temp3 = 1; //Lost contact
-    //         }
-    //       }
-    //     }
-    //   }
-    // }
 
       //Setting the inContact parameter
 	if(MAX(flag1, flag2)){
@@ -670,24 +626,6 @@ void Tree::slide(MatrixXd targetMatrix, vertex *nearestVertex, vertex **newVerte
 	(*newVertex)->parent = nearestVertex;
 	nearestVertex->children.push_back((*newVertex));
   	
-
-  // if(newContact > 0){
-  //   advance = 1;
-  //   normal[0] = MAP_normalx(pointOnNewContactSurf[0], pointOnNewContactSurf[1]);
-  //   normal[1] = MAP_normaly(pointOnNewContactSurf[0], pointOnNewContactSurf[1]);
-  //   dotProduct = (((*newVertex)->particleMatrix - pointOnNewContactSurf.replicate<1,NUMBEROFPARTICLES>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>())).colwise().sum();
-  //   (*newVertex)->particleMatrix = (*newVertex)->particleMatrix - (dotProduct.replicate<STATE_SIZE,1>()).cwiseProduct(normal.replicate<1,NUMBEROFPARTICLES>());
-  //   (*newVertex)->inContact = 1;
-  // }
-  // else if(lostContact > 0){
-  //   advance = 2;
-  //   // ----------------------- Include this later, how to do it in higher dimensions?-----------------------------
-  //   // projectToLostContact(newVertex, newContactSurface);
-  //   (*newVertex)->inContact = 0;
-  // }
-
-  // motion_model(newVertex);
-  // project(newVertex);
   return;
 }
 
@@ -731,11 +669,27 @@ int Tree::extendRRT(VectorXd qrand, double*  map, int x_size, int y_size){ //Ext
   mexPrintf("Printing newVertex matrix:\n");
   print_particleMatrix(newVertex->particleMatrix, STATE_SIZE, NUMBEROFPARTICLES);
   vertices.push_back(newVertex);
+
+
   if((newVertex->particleMatrix.rowwise().mean() - goal->particleMatrix.col(0)).norm() < step_size){
-    flag = 1; //Goal reached
-    goal->parent = newVertex;
-    newVertex->children.push_back(goal);
-    vertices.push_back(goal);
+
+	MatrixXd deltaMatrix(stateSize,numofParticles);
+	VectorXd meanParticle(stateSize);
+	MatrixXd covMat(stateSize,stateSize);
+	double CovCost;
+	meanParticle = newVertex->particleMatrix.rowwise().mean();
+	deltaMatrix = newVertex->particleMatrix.colwise() - meanParticle;
+	covMat = (deltaMatrix * deltaMatrix.transpose())/numofParticles;
+	CovCost = sqrt(covMat.trace());
+	mexPrintf("Covariance of particle set near to goal: %f\n", CovCost);
+	if (CovCost < 2)
+	{
+		flag = 1; //Goal reached
+	    goal->parent = newVertex;
+	    newVertex->children.push_back(goal);
+	    vertices.push_back(goal);
+	}
+
   }
 
   return flag;
