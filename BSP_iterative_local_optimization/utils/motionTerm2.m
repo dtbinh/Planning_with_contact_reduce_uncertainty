@@ -7,6 +7,6 @@ function vec = motionTerm2(b,u)
     sigma = vecTosigma(b(nState+1:end), nState);
     tau = A*sigma*(A*sigma)' + Mt*Mt';
     K = tau*H'*inv(H*tau*H' + N*N');
-    vec = (tau - K*H*tau).^0.5;
+    vec = (tau - K*H*tau).^0.5; % Square root of a matrix, should I use Cholesky decompostion here?
     vec = sigmaToVec(vec, nState);
 end
