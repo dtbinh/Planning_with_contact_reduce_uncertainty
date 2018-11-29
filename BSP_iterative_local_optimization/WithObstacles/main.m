@@ -2,11 +2,12 @@
 % assuming motion noise (Rt) to be independent of x and u (unit variance)
 % measurement noise (Qt) is dependent on x as given by the contour plot
 % variance is stored rowwise and its square-root is taken
+% Sigma used is std. deviation - element wise square root of covariance matrix - can be replaced ny Cholesky decomposition
 clc;
 clear all;
 close all;
-addpath('/media/saumya/Data/Study/CMU/Robotics/PlanningWithContact/Codes/Planning_with_contact_to_reduce_uncertainty/BSP_iterative_local_optimization/utils');
-global nState mControl pMeasure xf x0 N dt umax T Amp sig mu F G Fi Gi ei Qt_full P R q r p mapxmax mapymax delx delu delsig Mt Rt Qf Qt S1T s2T s3T x_nom0 sigmanom0 u_nom0
+addpath('/media/saumya/Data/Study/CMU/Robotics/PlanningWithContact/Codes/Planning_with_contact_to_reduce_uncertainty/BSP_iterative_local_optimization/WithObstacles/utils');
+global nState mControl pMeasure xf x0 N dt umax T Amp sig mu F G Fi Gi ei Qt_full P R q r p mapxmax mapymax delx delu delsig Mt Rt Qf Qt Ct S1T s2T s3T x_nom0 sigmanom0 u_nom0 obstacles ebs
 
 %% Declaring parameters
 % Q = 2*eye(2); R = 1; Qf = Q;
@@ -23,7 +24,7 @@ x0 = [10;20];
 xf = [20;70];
 umax = inf ;%upper control bound (optimization variable)
 
-% Parameters for the onbservation map
+% Parameters for the observation map
 Amp = 0.002;
 sig = 10000;
 mu = 60;
@@ -33,17 +34,21 @@ mapxmax = 100;
 mapymax = 100;
 
 % delta steps for finite difference operations
-delx = 0.01;
-delu = 0.01;
-delsig = 0.01;
+delx = 0.001;
+delu = 0.001;
+delsig = 0.001;
 
 % Noise for the motion model
-Mt = 200*eye(nState);
+Mt = 500*eye(nState);
 
-% Cost funcition penalty terms
-Rt = 10*eye(mControl); %u'*Rt*u
-Qt = 200*eye(nState);  % sigma*Qt*sigma
-Qf = 100*N*eye(nState); %x'*Qf*x + sigma*Qf*sigma
+% Cost function penalty terms
+Rt = 20*eye(mControl); %u'*Rt*u
+Qt = 250*eye(nState);  % sigma*Qt*sigma
+Ct = 200; % penalty for obstacle avoidance
+Qf = 150*N*eye(nState); %x'*Qf*x + sigma*Qf*sigma
+
+% Obstacles are 
+obstacles{1} = [40 20; 60 20; 60 80; 40 80]';
 
 %% Loading nominal trajectory
 load nominalTraj_X_origin15_15.mat
@@ -98,15 +103,17 @@ hold on;
 hold on;
 
 %% Initializing Nominal belief trajectory
-sigmanom0 = sigmaToVec(10*eye(nState), nState);
+sigmanom0 = sigmaToVec(100*eye(nState), nState);
 b_nom = zeros(nState+nState*(nState+1)/2, size(x,2)); % zero variance
 b_nom(1:nState, :) = x_nom0;
-b_nom(nState+1:end, 1) = sigmanom0;
+b_nom(nState+1:end,  1) = sigmanom0;
+sigmanomRest = sigmaToVec(0.01*eye(nState), nState);
+b_nom(nState+1:end, 2:end) = repmat(sigmanomRest,1,N-1);
 u_nom = u_nom0;
 
 
 outer_iter = 1;
-max_iterations_outer = 10;
+max_iterations_outer = 25;
 
 % Create a movie structure to add frames to
 mov(1:max_iterations_outer) = struct('cdata', [], 'colormap', []);
@@ -115,11 +122,19 @@ v = VideoWriter('BSP_iterative_local_optimization_2.avi');
 % Make the video writer available for writing
 open(v);
 
+TotCostTraj = 10^12;
+ebs = 1;
 %% iLQG loop
 while(outer_iter <= max_iterations_outer) % or l(t) <lt
     
-    plotTrajectoryWithVariance(t0, b_nom, u_nom);
-    
+    if ebs == 1 % Plot only if new trajectory is accepted
+        plotTrajectoryWithVariance(t0, b_nom, u_nom);
+        % Video writing, Store frame only if new trajectory is accepted
+        ax = gcf();
+        mov(outer_iter) = getframe(ax);
+        % Write frame to the video writer "v"
+        writeVideo(v,mov(outer_iter));
+    end
     %%Finding terminal S (constant)
     [S1T, s2T, s3T] = terminalS(b_nom, u_nom);
     
@@ -135,17 +150,26 @@ while(outer_iter <= max_iterations_outer) % or l(t) <lt
     % ODE45 for forward propagation
     [b_new, u_new] = forward_integral(L,I,b_nom,u_nom);
     
+    %% Cost of candidate trajectory
+    TotCostTraj_new = 0;
+    s30 = candidateCost(L, b_new, u_new);
+    TotCostTraj_new = s30;
     
-    b_nom = b_new;
-    u_nom = u_new;
+    if TotCostTraj_new < TotCostTraj
+        b_nom = b_new;
+        u_nom = u_new;
+        TotCostTraj = TotCostTraj_new;
+        ebs = 1
+    else
+%         b_nom = b_new;
+%         u_nom = u_new;
+        ebs = ebs/2
+    end
     
-    % Video writing
-    ax = gcf();
-    mov(outer_iter) = getframe(ax);
-    % Write frame to the video writer "v"
-    writeVideo(v,mov(outer_iter));
-    
-    outer_iter = outer_iter +1;
+
+    if ebs ==1 % add iteration only if trajectory accepted
+        outer_iter = outer_iter +1;
+    end
     pause(0.01);
 
 end

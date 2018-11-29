@@ -1,14 +1,13 @@
 % 2D point robot moving in an obstacle free space (velocity is the control input, no inertia system)
 % assuming motion noise (Rt) to be independent of x and u (unit variance)
 % measurement noise (Qt) is dependent on x as given by the contour plot
-% variance is stored rowwise and its square-root is taken elementwise
-% obstacles are square and 2D, stored in anticlockwise order starting from bottom-left
-
+% variance is stored rowwise and its square-root is taken
+% Sigma used is std. deviation - element wise square root of covariance matrix - can be replaced ny Cholesky decomposition
 clc;
 clear all;
 close all;
-addpath('/media/saumya/Data/Study/CMU/Robotics/PlanningWithContact/Codes/Planning_with_contact_to_reduce_uncertainty/BSP_iterative_local_optimization/Jump_Ricatti2/utils');
-global nState mControl pMeasure xf x0 N dt umax T Amp sig mu F G Fi Gi ei Qt_full P R q r p mapxmax mapymax delx delu delsig Mt Rt Qf Qt S1T s2T s3T x_nom0 sigmanom0 u_nom0 obstacles ebs
+addpath('/media/saumya/Data/Study/CMU/Robotics/PlanningWithContact/Codes/Planning_with_contact_to_reduce_uncertainty/BSP_iterative_local_optimization/WithObstacles_measurementAroundObstacles/utils');
+global nState mControl pMeasure xf x0 N dt umax T Amp sig mu F G Fi Gi ei Qt_full P R q r p mapxmax mapymax delx delu delsig Mt Rt Qf Qt Ct S1T s2T s3T x_nom0 sigmanom0 u_nom0 obstacles
 
 %% Declaring parameters
 % Q = 2*eye(2); R = 1; Qf = Q;
@@ -25,7 +24,7 @@ x0 = [10;20];
 xf = [20;70];
 umax = inf ;%upper control bound (optimization variable)
 
-% Parameters for the onbservation map
+% Parameters for the observation map
 Amp = 0.002;
 sig = 10000;
 mu = 60;
@@ -35,23 +34,21 @@ mapxmax = 100;
 mapymax = 100;
 
 % delta steps for finite difference operations
-delx = 0.01;
-delu = 0.01;
-delsig = 0.01;
+delx = 0.001;
+delu = 0.001;
+delsig = 0.001;
 
 % Noise for the motion model
-Mt = 1*eye(nState);
+Mt = 500*eye(nState);
 
-% Cost funcition penalty terms
-Rt = 1*eye(mControl); %u'*Rt*u
-Qt = 400*eye(nState);  % sigma*Qt*sigma
-Qf = 100*N*eye(nState); %x'*Qf*x + sigma*Qf*sigma
+% Cost function penalty terms
+Rt = 10*eye(mControl); %u'*Rt*u
+Qt = 1000*eye(nState);  % sigma*Qt*sigma
+Ct = 700; % penalty for obstacle avoidance
+Qf = 1000*N*eye(nState); %x'*Qf*x + sigma*Qf*sigma
 
 % Obstacles are 
-obstacles{1} = [30 20; 60 20; 60 80; 30 80]';
-
-% Increment factor for the control
-ebs = 1;
+obstacles{1} = [40 20; 60 20; 60 80; 40 80]';
 
 %% Loading nominal trajectory
 load nominalTraj_X_origin15_15.mat
@@ -97,8 +94,13 @@ mapy = 0:mapymax;
 [mapX,mapY] = meshgrid(mapx,mapy);
 
 % contZvar = Amp*exp(-(mapX - mu).^2/sig);
-contZvar = Amp*(mu - mapX).^2;
-conto = contourf(mapX,mapY,contZvar,50, 'edgecolor','none');
+% contZvar = Amp*(mu - mapX).^2;
+for i = 1:length(mapx)
+    for j = 1 : length(mapy)
+        contZvar(i,j) = measurementVarianceMap(mapx(i),mapy(j));
+    end
+end
+conto = contourf(mapX,mapY,contZvar',50, 'edgecolor','none');
 colormap(flipud(gray));
 hold on;
 % Plotting nominal trajectory
@@ -106,20 +108,22 @@ hold on;
 hold on;
 
 %% Initializing Nominal belief trajectory
-sigmanom0 = sigmaToVec(50*eye(nState), nState);
+sigmanom0 = sigmaToVec(100*eye(nState), nState);
 b_nom = zeros(nState+nState*(nState+1)/2, size(x,2)); % zero variance
 b_nom(1:nState, :) = x_nom0;
-b_nom(nState+1:end, 1) = sigmanom0;
+b_nom(nState+1:end,  1) = sigmanom0;
+sigmanomRest = sigmaToVec(0.01*eye(nState), nState);
+b_nom(nState+1:end, 2:end) = repmat(sigmanomRest,1,N-1);
 u_nom = u_nom0;
 
 
 outer_iter = 1;
-max_iterations_outer = 20;
+max_iterations_outer = 25;
 
 % Create a movie structure to add frames to
 mov(1:max_iterations_outer) = struct('cdata', [], 'colormap', []);
 % Create a video writer to use the writeVideo function
-v = VideoWriter('BSP_iterative_local_optimization_MeanJumpRicatti.avi');
+v = VideoWriter('BSP_iterative_local_optimization_2.avi');
 % Make the video writer available for writing
 open(v);
 TotCostTraj = 100000000;
@@ -143,25 +147,23 @@ while(outer_iter <= max_iterations_outer) % or l(t) <lt
     % ODE45 for forward propagation
     [b_new, u_new] = forward_integral(L,I,b_nom,u_nom);
     
-%     %% WRONG
-%     TotCostTraj_new = 0;
-%     for i = 1:N-1
-%         TotCostTraj_new = TotCostTraj_new + costFunctionRunning(u_new(:,i),b_new(:,i));
-%     end
-%     TotCostTraj_new = TotCostTraj_new + costTerminal(b_new(:,N));
-%     %%
-%     if TotCostTraj_new < TotCostTraj
-%         b_nom = b_new;
-%         u_nom = u_new;
-%         TotCostTraj = TotCostTraj_new;
-%         ebs = 1;
-%     else
-%         ebs = ebs/2;
-%     end
 
-     b_nom = b_new;
-     u_nom = u_new;
+    TotCostTraj_new = 0;
+    for i = 1:N-1
+        TotCostTraj_new = TotCostTraj_new + costFunctionRunning(u_new(:,i),b_new(:,i));
+    end
+    TotCostTraj_new = TotCostTraj_new + costTerminal(b_new(:,N));
+    %%
+    if TotCostTraj_new < TotCostTraj
+        b_nom = b_new;
+        u_nom = u_new;
+        TotCostTraj = TotCostTraj_new;
+        ebs = 1;
+    else
+        ebs = ebs/2;
+    end
     
+
     if ebs ==1 % Store frame only if new trajectory is accepted
         % Video writing
         ax = gcf();
